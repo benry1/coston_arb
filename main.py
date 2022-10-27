@@ -1,17 +1,13 @@
+from rpc import batchGetReserves
 import settings
 import itertools
 import time
 
 from web3 import Web3
 from pysondb import db
-from dotenv import load_dotenv
-
-load_dotenv()
 
 from graph import findpaths
 
-
-RPC = Web3(Web3.WebsocketProvider())
 
 # {
 #   "symbol": "testUSD",
@@ -33,17 +29,20 @@ tokenDB = db.getDb("./data/tokens.json")
 pairDB  = db.getDb("./data/pairs.json")
 
 BlazeSwapRouterAddress = "0xEbf80b08f69F359A1713F1C650eEC2F95947Cfe5"
-BlazeSwapContract = RPC.eth.contract(address=BlazeSwapRouterAddress, abi=settings.BlazeSwapRouterABI)
+BlazeSwapContract = settings.RPC.eth.contract(address=BlazeSwapRouterAddress, abi=settings.BlazeSwapRouterABI)
+
+
+PangolinRouterAddress  = "0x6a6C605700f477E56B9542Ca2a3D68B9A7edf599"
+PangolinContract  = settings.RPC.eth.contract(address=PangolinRouterAddress, abi=settings.BlazeSwapRouterABI)
 
 # Save token info if not exist
 def bootstrapTokenDatabase():
     for key in settings.tokens:
         if len(tokenDB.getByQuery({"symbol": key})) == 0:
             tokenAddress = settings.tokens[key]
-            tokenContract = RPC.eth.contract(address=tokenAddress, abi=settings.ERC20ABI)
+            tokenContract = settings.RPC.eth.contract(address=tokenAddress, abi=settings.ERC20ABI)
             decimals = tokenContract.functions.decimals().call()
             tokenDB.add({"symbol": key, "address": tokenAddress, "decimals": decimals})
-
 
 # Update valid pools in the database
 # Initialize function - not meant to update reserve values
@@ -61,9 +60,10 @@ def updatePairDatabase():
 
         #Not in the DB - Check if valid pair
         #by checking reserves.
+        ###TODO: Repeat for every exchange, create new pair for blaze/pangolin/neo/etc
         try:
             pairAddress = BlazeSwapContract.functions.pairFor(settings.tokens[token0], settings.tokens[token1]).call()
-            pairContract = RPC.eth.contract(address=pairAddress, abi=settings.BlazeSwapPairABI)
+            pairContract = settings.RPC.eth.contract(address=pairAddress, abi=settings.BlazeSwapPairABI)
             [r0, r1, ts] = pairContract.functions.getReserves().call() #Will fail here if invalid
             t0 = pairContract.functions.token0().call()
             t1 = pairContract.functions.token1().call()
@@ -76,25 +76,25 @@ def updatePairDatabase():
                             "symbol1": s1,
                             "reserve1": r1,
                             "pairAddress": pairAddress,
-                            "exchange": "blazeswap"     })
+                            "exchange": "blazeswap"
+                      })
         except Exception as e:
             #Invalid pair
             print(token0, token1, "failed")
             continue
 
-### TODO: Make this threaded. Takes almost 30s as is
 def updatePairReserves():
     allPairObjects = pairDB.getAll()
 
     start = time.time()
-    for pair in allPairObjects:
-        ministart = time.time()
-        pairContract = RPC.eth.contract(address=pair["pairAddress"], abi=settings.BlazeSwapPairABI)
-        [r0, r1, ts] = pairContract.functions.getReserves().call()
+    #BATCHED
+    updatedPairs = batchGetReserves(allPairObjects)
+    #Normalize to standard decimals
+    for pair in updatedPairs:
         d0 = tokenDB.getByQuery({"symbol": pair["symbol0"]})[0]["decimals"]
         d1 = tokenDB.getByQuery({"symbol": pair["symbol1"]})[0]["decimals"]
-        pairDB.updateByQuery({"pairAddress": pair["pairAddress"]}, {"reserve0": r0 / pow(10, d0), "reserve1": r1/pow(10, d1) })
-        print("Mini update took", time.time() - ministart)
+        pairDB.updateByQuery({"pairAddress": pair["pairAddress"]}, {"reserve0": pair["reserve0"] / pow(10, d0), "reserve1": pair["reserve1"]/pow(10, d1) })
+
     print("Update took ", time.time() - start)
 
 
@@ -112,7 +112,7 @@ def findArb(baseToken, maxLength):
 
 # Main Arb Loop
 def tick():
-    # updatePairReserves()
+    updatePairReserves()
 
     findpaths(settings.tokens["WCFLR"], pairDB, settings.tokens)
 

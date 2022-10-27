@@ -1,5 +1,8 @@
+import json
+import operator
 from typing import List
 from collections import deque
+from decimal import Decimal
 from virtualpools import getAmountOut, getEaEb, getOptimalAmount
 
 
@@ -40,10 +43,12 @@ def isDuplicatePath(path, seen):
             return True
     return False
 
-# Utility function for finding paths in graph
-# from source to destination
+
+#Literally shotgun blasts every path possible
+#We just stop on all cycles
+#so , so , so , so , SO much room for optimization
 def findpaths(src: str, pairDB, tokens) -> None:
-    maxPathLength = 7
+    maxPathLength = 8
     minPathLength = 3
     profitablePaths = []
     # Create a queue which stores
@@ -73,15 +78,15 @@ def findpaths(src: str, pairDB, tokens) -> None:
             # printpath(path)
             Ea, Eb = getEaEb(src, path, pairDB)
             if (Ea < Eb):
-                newPath = {'path': path, "Ea": Ea, "Eb": Eb}
-                newPath['optimalAmount'] = getOptimalAmount(Ea, Eb)
-                if newPath['optimalAmount'] > 0:
-                    newPath['outputAmount'] = getAmountOut(newPath['optimalAmount'], Ea, Eb)
-                    newPath['profit'] = newPath['outputAmount'] - newPath['optimalAmount']
+                newCycle = {'path': path, "Ea": Ea, "Eb": Eb}
+                newCycle['optimalAmount'] = getOptimalAmount(Ea, Eb)
+                if newCycle['optimalAmount'] > 0:
+                    newCycle['outputAmount'] = getAmountOut(newCycle['optimalAmount'], Ea, Eb)
+                    newCycle['profit'] = newCycle['outputAmount'] - newCycle['optimalAmount']
+                    newCycle['profitRatio'] = newCycle['outputAmount'] / newCycle['optimalAmount']
                     #TODO: Limit by profit margin? Worry about gas fees. etc.
-                    profitablePaths.append(newPath)
-                    if (len(profitablePaths) > 50 or len(path) > maxPathLength):
-                        print(profitablePaths)
+                    profitablePaths.append(newCycle)
+                    if (len(profitablePaths) > 75 or len(path) > maxPathLength):
                         break
             
  
@@ -92,3 +97,9 @@ def findpaths(src: str, pairDB, tokens) -> None:
                 newpath = path.copy()
                 newpath.append(neighbors[last][i])
                 q.append(newpath)
+
+    print("Done searching...")
+    # profitablePaths.sort(reverse=True, key=operator.itemgetter('profitRatio'))
+    profitablePaths.sort(reverse=True, key=operator.itemgetter('profit'))
+
+    print(profitablePaths[0:10])

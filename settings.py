@@ -1,6 +1,11 @@
 # Define Globals
 
 from secrets import token_urlsafe
+from web3 import Web3
+from dotenv import dotenv_values
+
+
+config = dotenv_values(".env")
 
 
 global BlazeSwapABI
@@ -23,3 +28,6 @@ tokens = {
     "testXAU": "0xF3D185162E55463264B0d63DD4497093B00F57d1",
     "WCFLR":   "0x1659941d425224408c5679eeef606666c7991a8A"
 }
+
+global RPC
+RPC = Web3(Web3.WebsocketProvider(config["wsURL"]))
