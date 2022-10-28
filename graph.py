@@ -3,6 +3,7 @@ import operator
 from typing import List
 from collections import deque
 from decimal import Decimal
+from johnson import simple_cycles
 from virtualpools import getAmountOut, getEaEb, getOptimalAmount
 
 
@@ -35,6 +36,7 @@ def getNeighbors(asset: str, pairDB):
             retList.append(pair["token1"])
         else:
             retList.append(pair["token0"])
+    retList = list(set(retList))
     return retList
 
 def isDuplicatePath(path, seen):
@@ -62,41 +64,53 @@ def findpaths(src: str, pairDB, tokens) -> None:
 
     #build adjacency list
     neighbors = {}
-    for token in tokens.values():
+    nodeValues = {}
+    indexValues = {}
+    graph = {} # Final adjacency list with number values
+    for (idx, token) in enumerate(tokens.values()):
+        nodeValues[token] = idx + 1
+        indexValues[idx + 1] = token
         neighbors[token] = getNeighbors(token, pairDB)
 
+    for (idx, token) in enumerate(tokens.values()):
+        adjacencyList = []
+        for neighbor in neighbors[token]:
+            adjacencyList.append(nodeValues[neighbor])
+        adjacencyList.sort()
+        graph[nodeValues[token]] = adjacencyList
     
-     
-    while q:
-        # print(path)
-        path = q.popleft()
-        last = path[len(path) - 1]
- 
-        # If last vertex is the desired destination
-        # then print the path
-        if (last == src and len(path) > minPathLength and not isDuplicatePath(path, profitablePaths)):
-            # printpath(path)
-            Ea, Eb = getEaEb(src, path, pairDB)
-            if (Ea < Eb):
-                newCycle = {'path': path, "Ea": Ea, "Eb": Eb}
-                newCycle['optimalAmount'] = getOptimalAmount(Ea, Eb)
-                if newCycle['optimalAmount'] > 0:
-                    newCycle['outputAmount'] = getAmountOut(newCycle['optimalAmount'], Ea, Eb)
-                    newCycle['profit'] = newCycle['outputAmount'] - newCycle['optimalAmount']
-                    newCycle['profitRatio'] = newCycle['outputAmount'] / newCycle['optimalAmount']
-                    #TODO: Limit by profit margin? Worry about gas fees. etc.
-                    profitablePaths.append(newCycle)
-                    if (len(profitablePaths) > 75 or len(path) > maxPathLength):
-                        break
-            
- 
-        # Traverse to all the nodes connected to
-        # current vertex and push new path to queue
-        for i in range(len(neighbors[last])):
-            if (isNotVisited(neighbors[last][i], path)):
-                newpath = path.copy()
-                newpath.append(neighbors[last][i])
-                q.append(newpath)
+    # print(nodeValues)
+    # print(indexValues)
+    # print(graph)
+
+    cycles = simple_cycles(graph)
+    cycles = list(cycles)
+    cycles.sort(key=len)
+    counter = 0
+    for cycle in cycles:
+        counter = counter + 1
+        if counter % 1000 == 0:
+            print(counter, len(cycle))
+        if len(cycle) < 4:
+            continue
+        #Reconstruct path
+        reconstructed_cycle = []
+        cycle.append(1) # The algo leaves off the final step back to start, we need it
+        for vertex in cycle:
+            reconstructed_cycle.append(indexValues[vertex])
+        
+        #Get EaEb for reconstructed cycle
+        # print(reconstructed_cycle)
+        Ea, Eb = getEaEb(src, reconstructed_cycle, pairDB)
+        if (Ea < Eb):
+            newCycle = {'path': reconstructed_cycle, "Ea": Ea, "Eb": Eb}
+            newCycle['optimalAmount'] = getOptimalAmount(Ea, Eb)
+            if newCycle['optimalAmount'] > 0:
+                newCycle['outputAmount'] = getAmountOut(newCycle['optimalAmount'], Ea, Eb)
+                newCycle['profit'] = newCycle['outputAmount'] - newCycle['optimalAmount']
+                newCycle['profitRatio'] = newCycle['outputAmount'] / newCycle['optimalAmount']
+                #TODO: Limit by profit margin? Worry about gas fees. etc.
+                profitablePaths.append(newCycle)
 
     print("Done searching...")
     # profitablePaths.sort(reverse=True, key=operator.itemgetter('profitRatio'))

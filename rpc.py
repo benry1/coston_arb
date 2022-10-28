@@ -56,7 +56,7 @@ class BatchHTTPProvider(HTTPProvider):
         return response
 
 #Get up to 200 reserves in one call
-batch_provider = BatchHTTPProvider(settings.config["httpURL"])
+batch_provider = BatchHTTPProvider(settings.config["rpcUrl"])
 def get_reserves(pairs, blockNumber='latest'):
     r = list(generateGetReservesBatch(pairs, blockNumber))
     resp = batch_provider.make_batch_request(json.dumps(r))
