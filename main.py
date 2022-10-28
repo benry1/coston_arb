@@ -37,7 +37,7 @@ PangolinContract  = settings.RPC.eth.contract(address=PangolinRouterAddress, abi
 
 # Save token info if not exist
 def bootstrapTokenDatabase():
-    for key in settings.tokens:
+    for key in settings.tokens.keys():
         if len(tokenDB.getByQuery({"symbol": key})) == 0:
             tokenAddress = settings.tokens[key]
             tokenContract = settings.RPC.eth.contract(address=tokenAddress, abi=settings.ERC20ABI)
@@ -93,38 +93,28 @@ def updatePairReserves():
     for pair in updatedPairs:
         d0 = tokenDB.getByQuery({"symbol": pair["symbol0"]})[0]["decimals"]
         d1 = tokenDB.getByQuery({"symbol": pair["symbol1"]})[0]["decimals"]
-        pairDB.updateByQuery({"pairAddress": pair["pairAddress"]}, {"reserve0": pair["reserve0"] / pow(10, d0), "reserve1": pair["reserve1"]/pow(10, d1) })
+        pairDB.updateByQuery(
+            {"pairAddress": pair["pairAddress"]}, 
+            {"reserve0": pair["reserve0"] / pow(10, d0), "reserve1": pair["reserve1"]/pow(10, d1) }
+            )
 
     print("Update took ", time.time() - start)
-
-
-# Returns list of objects
-# {
-#   'path': [addr1, addr2, addr3, addr4, addr1],
-#   'Ea': Ea, 'Eb': Eb
-# }[]
-def findArb(baseToken, maxLength):
-    profitableTrades = []
-    basePath = [baseToken]
-
-    pass
-
 
 # Main Arb Loop
 def tick():
     updatePairReserves()
 
-    findpaths(settings.tokens["WCFLR"], pairDB, settings.tokens)
+    findpaths(settings.tokens["WCFLR"], pairDB, settings.tokens, 'profitRatio')
 
 # Initialization
 def main():
 
     #Bootstrap with latest tokens and pools
     bootstrapTokenDatabase() #Get token decimals
-    # updatePairDatabase()
+    # updatePairDatabase() #Check for any new pairs since last run
 
-    # while True:
-    tick()
+    while True:
+        tick()
 
 
 main()

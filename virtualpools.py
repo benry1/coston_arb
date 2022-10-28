@@ -48,14 +48,14 @@ def getEaEb(tokenIn, path, pairsDB):
             else:
                 tokenOut = pair['token0']
         if idx == 1:
-            Ra = adjustReserve(pairs[0]['token0'], pairs[0]['reserve0'])
-            Rb = adjustReserve(pairs[0]['token1'], pairs[0]['reserve1'])
+            Ra = Decimal(pairs[0]['reserve0'])
+            Rb = Decimal(pairs[0]['reserve1'])
             if tokenIn == pairs[0]['token1']:
                 temp = Ra
                 Ra = Rb
                 Rb = temp
-            Rb1 = adjustReserve(pair['token0'], pair['reserve0'])
-            Rc = adjustReserve(pair['token1'], pair['reserve1'])
+            Rb1 = Decimal(pair['reserve0'])
+            Rc = Decimal(pair['reserve1'])
             if tokenOut == pair['token1']:
                 temp = Rb1
                 Rb1 = Rc
@@ -63,13 +63,13 @@ def getEaEb(tokenIn, path, pairsDB):
                 tokenOut = pair['token0']
             else:
                 tokenOut = pair['token1']
-            Ea = toInt(d1000*Ra*Rb1/(d1000*Rb1+d997*Rb))
-            Eb = toInt(d997*Rb*Rc/(d1000*Rb1+d997*Rb))
+            Ea = d1000*Ra*Rb1/(d1000*Rb1+d997*Rb)
+            Eb = d997*Rb*Rc/(d1000*Rb1+d997*Rb)
         if idx > 1:
             Ra = Ea
             Rb = Eb
-            Rb1 = adjustReserve(pair['token0'], pair['reserve0'])
-            Rc = adjustReserve(pair['token1'], pair['reserve1'])
+            Rb1 = Decimal(pair['reserve0'])
+            Rc = Decimal(pair['reserve1'])
             if tokenOut == pair['token1']:
                 temp = Rb1
                 Rb1 = Rc
@@ -77,10 +77,10 @@ def getEaEb(tokenIn, path, pairsDB):
                 tokenOut = pair['token0']
             else:
                 tokenOut = pair['token1']
-            Ea = toInt(d1000*Ra*Rb1/(d1000*Rb1+d997*Rb))
-            Eb = toInt(d997*Rb*Rc/(d1000*Rb1+d997*Rb))
+            Ea = d1000*Ra*Rb1/(d1000*Rb1+d997*Rb)
+            Eb = d997*Rb*Rc/(d1000*Rb1+d997*Rb)
         idx += 1
-    return Ea, Eb
+    return toInt(Ea), toInt(Eb)
 
 
 def getPool(t0, t1, pairDB):

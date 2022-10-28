@@ -1,8 +1,10 @@
 import json
 import operator
+import time
 from typing import List
 from collections import deque
 from decimal import Decimal
+from do_arb import submitArbitrage
 from johnson import simple_cycles
 from virtualpools import getAmountOut, getEaEb, getOptimalAmount
 
@@ -49,20 +51,15 @@ def isDuplicatePath(path, seen):
 #Literally shotgun blasts every path possible
 #We just stop on all cycles
 #so , so , so , so , SO much room for optimization
-def findpaths(src: str, pairDB, tokens) -> None:
-    maxPathLength = 8
-    minPathLength = 3
+def findpaths(from_token, 
+              pairDB, 
+              tokens,
+              sort_key):
     profitablePaths = []
-    # Create a queue which stores
-    # the paths
-    q = deque()
- 
-    # Path vector to store the current path
-    path = []
-    path.append(src)
-    q.append(path.copy())
+    profitablePathCounter = 0
 
-    #build adjacency list
+    #Build adjacency list as Johnson's algorithm needs it
+    #Also build an index to convert back later
     neighbors = {}
     nodeValues = {}
     indexValues = {}
@@ -75,24 +72,28 @@ def findpaths(src: str, pairDB, tokens) -> None:
     for (idx, token) in enumerate(tokens.values()):
         adjacencyList = []
         for neighbor in neighbors[token]:
-            adjacencyList.append(nodeValues[neighbor])
+            if (neighbor in tokens.values()):
+                adjacencyList.append(nodeValues[neighbor])
         adjacencyList.sort()
         graph[nodeValues[token]] = adjacencyList
-    
-    # print(nodeValues)
-    # print(indexValues)
-    # print(graph)
 
+    #Randomize the order of the cycles
+    #So we can "theoretically" check a different
+    #subset of cycles every time
     cycles = simple_cycles(graph)
-    cycles = list(cycles)
+    cycles = list(filter(lambda cycle: len(cycle) < 8 and len(cycle) > 2, cycles))
     cycles.sort(key=len)
+
+    print(len(cycles))
     counter = 0
+    timer = time.time()
+    stepTimer = time.time() #oh no, what are you doing step-timer?
     for cycle in cycles:
         counter = counter + 1
         if counter % 1000 == 0:
-            print(counter, len(cycle))
-        if len(cycle) < 4:
-            continue
+            print("Cycles checked: {ct} Profitable cycles found: {ppc}, Time since last log: {time}".format(ct=counter, ppc=profitablePathCounter, time=time.time() - stepTimer))
+            stepTimer = time.time()
+
         #Reconstruct path
         reconstructed_cycle = []
         cycle.append(1) # The algo leaves off the final step back to start, we need it
@@ -100,20 +101,26 @@ def findpaths(src: str, pairDB, tokens) -> None:
             reconstructed_cycle.append(indexValues[vertex])
         
         #Get EaEb for reconstructed cycle
-        # print(reconstructed_cycle)
-        Ea, Eb = getEaEb(src, reconstructed_cycle, pairDB)
+        Ea, Eb = getEaEb(from_token, reconstructed_cycle, pairDB)
         if (Ea < Eb):
             newCycle = {'path': reconstructed_cycle, "Ea": Ea, "Eb": Eb}
             newCycle['optimalAmount'] = getOptimalAmount(Ea, Eb)
-            if newCycle['optimalAmount'] > 0:
+            if newCycle['optimalAmount'] > 10:
                 newCycle['outputAmount'] = getAmountOut(newCycle['optimalAmount'], Ea, Eb)
                 newCycle['profit'] = newCycle['outputAmount'] - newCycle['optimalAmount']
                 newCycle['profitRatio'] = newCycle['outputAmount'] / newCycle['optimalAmount']
-                #TODO: Limit by profit margin? Worry about gas fees. etc.
+                
+                #Only keep the 10 most profitable trades
                 profitablePaths.append(newCycle)
+                profitablePaths.sort(reverse=True, key=operator.itemgetter(sort_key))
+                profitablePaths = profitablePaths[:10]
+                profitablePathCounter += 1
+                if profitablePathCounter > 1500:
+                    break
 
-    print("Done searching...")
-    # profitablePaths.sort(reverse=True, key=operator.itemgetter('profitRatio'))
-    profitablePaths.sort(reverse=True, key=operator.itemgetter('profit'))
+    print("Done searching", profitablePathCounter, " in ", time.time() - timer)
+    print(profitablePaths)
 
-    print(profitablePaths[0:10])
+    #Naively execute the best opportunity
+    execute = profitablePaths[0]
+    submitArbitrage(execute["path"], execute["optimalAmount"], execute["outputAmount"])
