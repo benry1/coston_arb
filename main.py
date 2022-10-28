@@ -100,11 +100,12 @@ def updatePairReserves():
 
     print("Update took ", time.time() - start)
 
-# Main Arb Loop
-def tick():
+# Main Loop
+#Returns: -1 on revert, 0 on no opportunities, 1 on success
+def tick() -> int:
     updatePairReserves()
 
-    findpaths(settings.tokens["WCFLR"], pairDB, settings.tokens, 'profitRatio')
+    return findpaths(settings.tokens["WCFLR"], pairDB, settings.tokens, 'profit')
 
 # Initialization
 def main():
@@ -113,8 +114,17 @@ def main():
     bootstrapTokenDatabase() #Get token decimals
     # updatePairDatabase() #Check for any new pairs since last run
 
+    consecutiveReverts = 0
     while True:
-        tick()
+        status = tick()
+        if status < 0:
+            consecutiveReverts += 1
+        else:
+            consecutiveReverts = 0
+        
+        #Naive negative loop safety
+        if consecutiveReverts > 5:
+            break
 
 
 main()

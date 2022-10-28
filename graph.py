@@ -1,6 +1,7 @@
 import json
 import operator
 import time
+import random
 from typing import List
 from collections import deque
 from decimal import Decimal
@@ -48,13 +49,14 @@ def isDuplicatePath(path, seen):
     return False
 
 
-#Literally shotgun blasts every path possible
-#We just stop on all cycles
-#so , so , so , so , SO much room for optimization
+#Use Johnson algorithm to quickly find all cycles through WNAT
+#Then compute virtual pool size
+#Optimizations likely on pool calculations. ~2.25s/1000 pools
+#Returns: -1 on revert, 0 on no paths found, 1 on success
 def findpaths(from_token, 
               pairDB, 
               tokens,
-              sort_key):
+              sort_key) -> int:
     profitablePaths = []
     profitablePathCounter = 0
 
@@ -82,17 +84,23 @@ def findpaths(from_token,
     #subset of cycles every time
     cycles = simple_cycles(graph)
     cycles = list(filter(lambda cycle: len(cycle) < 8 and len(cycle) > 2, cycles))
-    cycles.sort(key=len)
+    random.shuffle(cycles)
+    # cycles.sort(key=len)
 
     print(len(cycles))
     counter = 0
     timer = time.time()
     stepTimer = time.time() #oh no, what are you doing step-timer?
     for cycle in cycles:
+        #Logging
         counter = counter + 1
         if counter % 1000 == 0:
             print("Cycles checked: {ct} Profitable cycles found: {ppc}, Time since last log: {time}".format(ct=counter, ppc=profitablePathCounter, time=time.time() - stepTimer))
             stepTimer = time.time()
+
+        #Base Case of sorts
+        if profitablePathCounter > 1000 or counter > 15000:
+            break
 
         #Reconstruct path
         reconstructed_cycle = []
@@ -102,25 +110,38 @@ def findpaths(from_token,
         
         #Get EaEb for reconstructed cycle
         Ea, Eb = getEaEb(from_token, reconstructed_cycle, pairDB)
-        if (Ea < Eb):
-            newCycle = {'path': reconstructed_cycle, "Ea": Ea, "Eb": Eb}
-            newCycle['optimalAmount'] = getOptimalAmount(Ea, Eb)
-            if newCycle['optimalAmount'] > 10:
-                newCycle['outputAmount'] = getAmountOut(newCycle['optimalAmount'], Ea, Eb)
-                newCycle['profit'] = newCycle['outputAmount'] - newCycle['optimalAmount']
-                newCycle['profitRatio'] = newCycle['outputAmount'] / newCycle['optimalAmount']
-                
-                #Only keep the 10 most profitable trades
-                profitablePaths.append(newCycle)
-                profitablePaths.sort(reverse=True, key=operator.itemgetter(sort_key))
-                profitablePaths = profitablePaths[:10]
-                profitablePathCounter += 1
-                if profitablePathCounter > 1500:
-                    break
 
-    print("Done searching", profitablePathCounter, " in ", time.time() - timer)
+        #Move on if not profitable
+        if (Ea > Eb):
+            continue
+
+        newCycle = {'path': reconstructed_cycle, "Ea": Ea, "Eb": Eb}
+        newCycle['optimalAmount'] = getOptimalAmount(Ea, Eb)
+        #Move on if volume too small
+        if newCycle['optimalAmount'] < 10:
+            continue
+
+        newCycle['outputAmount'] = getAmountOut(newCycle['optimalAmount'], Ea, Eb)
+
+        #Move on if profit too small
+        if newCycle["outputAmount"] < newCycle["optimalAmount"] + Decimal(1.5):
+            continue
+
+        newCycle['profit'] = newCycle['outputAmount'] - newCycle['optimalAmount']
+        newCycle['profitRatio'] = newCycle['outputAmount'] / newCycle['optimalAmount']
+        
+        #Only keep the 10 most profitable trades
+        profitablePaths.append(newCycle)
+        profitablePaths.sort(reverse=True, key=operator.itemgetter(sort_key))
+        profitablePaths = profitablePaths[:10]
+        profitablePathCounter += 1
+
+    print("Done searching, found ", profitablePathCounter, " in ", time.time() - timer)
     print(profitablePaths)
 
     #Naively execute the best opportunity
-    execute = profitablePaths[0]
-    submitArbitrage(execute["path"], execute["optimalAmount"], execute["outputAmount"])
+    if len(profitablePaths) > 0:
+        execute = profitablePaths[0]
+        return submitArbitrage(execute["path"], execute["optimalAmount"], execute["outputAmount"])
+    else:
+        return 0

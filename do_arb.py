@@ -7,7 +7,8 @@ ArbitrageContract = settings.RPC.eth.contract(address=settings.ArbitrageAddress,
 
 #TODO: Support triangles around multiple exchanges. Requires contract updates
 #TODO: Support more than WNAT cycles
-def submitArbitrage(path, amountIn, expectedOut):
+#returns: -1 on revert, 1 on success
+def submitArbitrage(path, amountIn, expectedOut) -> int :
 
     #
     # Get Transaction settings
@@ -29,6 +30,8 @@ def submitArbitrage(path, amountIn, expectedOut):
 
     
     tx_hash = "0xdebug"
+    gas = 0
+    status = "Debug"
 
     if not settings.debug:
         acct = settings.RPC.eth.account.privateKeyToAccount(settings.config["privateKey"])
@@ -36,7 +39,7 @@ def submitArbitrage(path, amountIn, expectedOut):
                         int(executionAmount * 10**18), 
                         int((executionAmount + 1) * wnat_multiplier), #Require at least 1 token profit
                         path,
-                        isDeflationary).buildTransaction({
+                        isDeflationary).build_transaction({
                             'from': acct.address,
                             'nonce': settings.RPC.eth.getTransactionCount(acct.address),
                             'gas': 3000000
@@ -50,12 +53,15 @@ def submitArbitrage(path, amountIn, expectedOut):
         print("Waiting for receipt")
         tx_receipt = settings.RPC.eth.wait_for_transaction_receipt(tx_hash)
         print(tx_receipt)
+        gas = tx_receipt["effectiveGasPrice"] / 10**18 * tx_receipt["gasUsed"]
+        status = "Success" if tx_receipt["status"] != 0 else "Revert"
+        print(status, gas)
 
     #
     #   Logging
     #
 
-    #TODO: How to get actual output from chain ??
+    #TODO: How to get actual profit output from chain ??
 
     now = datetime.now()
     dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
@@ -64,10 +70,12 @@ def submitArbitrage(path, amountIn, expectedOut):
                     + "Optimal: " + str(amountIn) + " Optimal Out: " + str(expectedOut) + "\n"\
                     + "Actual In: " + str(executionAmount) + "\n"\
                     + "Path: " + str(path) + "\n"\
-                    + "Include Deflationary: " + str(isDeflationary) + "\n"\
-                    + "Tx Hash: " + str(tx_hash) + "\n\n"
+                    + "Includes Deflationary: " + str(isDeflationary) + "\n"\
+                    + "Gas Burnt: " + str(gas) + " Status: " + status + "\n\n"
     
     logFile = open("./log/log.txt", "a")
     logFile.write(logMessage)
     logFile.close()
+
+    return 1 if status == "Success" else -1
 
