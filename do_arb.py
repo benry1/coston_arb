@@ -26,7 +26,7 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
     if not settings.debug:
         available = ArbitrageContract.functions.getBalance(settings.tokens["WCFLR"]).call()
         available = available / wnat_multiplier
-        executionAmount = min(amountIn, available)
+        executionAmount = min(amountIn, int(available))
 
     
     tx_hash = "0xdebug"
