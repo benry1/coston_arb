@@ -37,10 +37,8 @@ def adjustReserve(token, amount):
     return Decimal(amount)
 
 
-def getEaEb(tokenIn, path, pairsDB):
-    miniTimer = time.time()
-    pairs = getPairsInPath(path, pairsDB)
-    fileAccessTime = (time.time() - miniTimer)
+def getEaEb(tokenIn, path):
+    pairs = getPairsInPath(path)
 
     Ea = None
     Eb = None
@@ -88,15 +86,15 @@ def getEaEb(tokenIn, path, pairsDB):
     return toInt(Ea), toInt(Eb)
 
 
-def getPool(t0, t1, pairDB):
+def getPool(t0, t1):
     if (t0 < t1):
         return pairCache[(t0, t1)]
     else:
         return pairCache[(t1, t0)]
 
-def getPairsInPath(path, pairDB):
+def getPairsInPath(path):
     retPools = []
     for i in range(len(path) - 1):
-        retPools.append(getPool(path[i], path[i+1], pairDB))
+        retPools.append(getPool(path[i], path[i+1]))
     
     return retPools

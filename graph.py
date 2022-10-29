@@ -52,12 +52,9 @@ def isDuplicatePath(path, seen):
 
 #Use Johnson algorithm to quickly find all cycles through WNAT
 #Then compute virtual pool size
-#Optimizations available here... currently ~1.25s/10000 pools
+#Optimizations available here, in "getEaEb"... currently ~0.25s/10000 pools
 #Returns: -1 on revert, 0 on no paths found, 1 on success
-def findpaths(from_token, 
-              pairDB, 
-              tokens,
-              sort_key) -> int:
+def findpaths(from_token, sort_key) -> int:
 
     profitablePaths = []
     profitablePathCounter = 0
@@ -79,7 +76,7 @@ def findpaths(from_token,
             reconstructed_cycle.append(node_index_values[vertex])
         
         #Get EaEb for reconstructed cycle
-        Ea, Eb = getEaEb(from_token, reconstructed_cycle, pairDB)
+        Ea, Eb = getEaEb(from_token, reconstructed_cycle)
 
         #Move on if not profitable
         if (Ea > Eb):

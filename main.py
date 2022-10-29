@@ -66,7 +66,7 @@ def updatePairDatabase():
 
         #Not in the DB - Check if valid pair
         #by checking reserves.
-        ###TODO: Repeat for every exchange, create new pair for blaze/pangolin/neo/etc
+        ###TODO: Repeat for every exchange, create new pair for blaze/pangolin/neo/canaryx/flrfinance/etc
         try:
             # pairAddress = BlazeSwapContract.functions.pairFor(settings.tokens[token0], settings.tokens[token1]).call()
             pairAddress = OracleSwapContract.functions.getPair(settings.tokens[token0], settings.tokens[token1]).call()
@@ -162,7 +162,7 @@ def initializeCycleList():
 def tick() -> int:
     updatePairReserves()
 
-    return findpaths(settings.tokens["WNAT"], pairDB, settings.tokens, 'profit')
+    return findpaths(settings.tokens["WNAT"], 'profit')
 
 import cProfile
 import pstats
