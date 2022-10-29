@@ -24,7 +24,7 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
     executionAmount = amountIn
     wnat_multiplier = 10 ** 18
     if not settings.debug:
-        available = ArbitrageContract.functions.getBalance(settings.tokens["WCFLR"]).call()
+        available = ArbitrageContract.functions.getBalance(settings.tokens["WNAT"]).call()
         available = available / wnat_multiplier
         executionAmount = min(amountIn, int(available))
 

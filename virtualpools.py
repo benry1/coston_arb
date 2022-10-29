@@ -1,5 +1,7 @@
 from decimal import Decimal
+from settings import pairCache
 import itertools
+import time
 
 
 d997 = Decimal(997)
@@ -34,8 +36,11 @@ def adjustReserve(token, amount):
     # return Decimal(int(res))
     return Decimal(amount)
 
+
 def getEaEb(tokenIn, path, pairsDB):
+    miniTimer = time.time()
     pairs = getPairsInPath(path, pairsDB)
+    fileAccessTime = (time.time() - miniTimer)
 
     Ea = None
     Eb = None
@@ -80,12 +85,14 @@ def getEaEb(tokenIn, path, pairsDB):
             Ea = d1000*Ra*Rb1/(d1000*Rb1+d997*Rb)
             Eb = d997*Rb*Rc/(d1000*Rb1+d997*Rb)
         idx += 1
-    return toInt(Ea), toInt(Eb)
+    return toInt(Ea), toInt(Eb), fileAccessTime
 
 
 def getPool(t0, t1, pairDB):
-    pairlist = pairDB.getByQuery({"token0": t0, "token1": t1}) + pairDB.getByQuery({"token1": t0, "token0": t1})
-    return pairlist[0]
+    if (t0 < t1):
+        return pairCache[(t0, t1)]
+    else:
+        return pairCache[(t1, t0)]
 
 def getPairsInPath(path, pairDB):
     retPools = []

@@ -82,15 +82,15 @@ def findpaths(from_token,
     #Randomize the order of the cycles
     #So we can "theoretically" check a different
     #subset of cycles every time
+    timer = time.time()
     cycles = simple_cycles(graph)
-    cycles = list(filter(lambda cycle: len(cycle) < 8 and len(cycle) > 2, cycles))
-    random.shuffle(cycles)
-    # cycles.sort(key=len)
+    cycles = filter(lambda cycle: len(cycle) < 8 and len(cycle) > 2, cycles)
 
-    print(len(cycles))
     counter = 0
     timer = time.time()
     stepTimer = time.time() #oh no, what are you doing step-timer?
+    cumulativeEaEbTimer = 0
+    fileAccessTimer = 0
     for cycle in cycles:
         #Logging
         counter = counter + 1
@@ -109,7 +109,16 @@ def findpaths(from_token,
             reconstructed_cycle.append(indexValues[vertex])
         
         #Get EaEb for reconstructed cycle
-        Ea, Eb = getEaEb(from_token, reconstructed_cycle, pairDB)
+        eaebTimer = time.time()
+        Ea, Eb, fileAccessTime = getEaEb(from_token, reconstructed_cycle, pairDB)
+        cumulativeEaEbTimer += (time.time() - eaebTimer)
+        fileAccessTimer += fileAccessTime
+
+        if counter % 1000 == 0:
+            print("Time spent on EaEb Calculations: ", cumulativeEaEbTimer)
+            cumulativeEaEbTimer = 0
+            print("File Access Time", fileAccessTimer)
+            fileAccessTimer = 0
 
         #Move on if not profitable
         if (Ea > Eb):
@@ -118,13 +127,13 @@ def findpaths(from_token,
         newCycle = {'path': reconstructed_cycle, "Ea": Ea, "Eb": Eb}
         newCycle['optimalAmount'] = getOptimalAmount(Ea, Eb)
         #Move on if volume too small
-        if newCycle['optimalAmount'] < 10:
+        if newCycle['optimalAmount'] < 5:
             continue
 
         newCycle['outputAmount'] = getAmountOut(newCycle['optimalAmount'], Ea, Eb)
 
         #Move on if profit too small
-        if newCycle["outputAmount"] < newCycle["optimalAmount"] + Decimal(1.5):
+        if newCycle["outputAmount"] < newCycle["optimalAmount"] + Decimal(1):
             continue
 
         newCycle['profit'] = newCycle['outputAmount'] - newCycle['optimalAmount']
