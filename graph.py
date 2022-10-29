@@ -8,6 +8,7 @@ from decimal import Decimal
 from do_arb import submitArbitrage
 from johnson import simple_cycles
 from virtualpools import getAmountOut, getEaEb, getOptimalAmount
+from settings import wnat_cycles, node_index_values
 
 
 # Utility function for printing
@@ -51,74 +52,34 @@ def isDuplicatePath(path, seen):
 
 #Use Johnson algorithm to quickly find all cycles through WNAT
 #Then compute virtual pool size
-#Optimizations likely on pool calculations. ~2.25s/1000 pools
+#Optimizations available here... currently ~1.25s/10000 pools
 #Returns: -1 on revert, 0 on no paths found, 1 on success
 def findpaths(from_token, 
               pairDB, 
               tokens,
               sort_key) -> int:
+
     profitablePaths = []
     profitablePathCounter = 0
-
-    #Build adjacency list as Johnson's algorithm needs it
-    #Also build an index to convert back later
-    neighbors = {}
-    nodeValues = {}
-    indexValues = {}
-    graph = {} # Final adjacency list with number values
-    for (idx, token) in enumerate(tokens.values()):
-        nodeValues[token] = idx + 1
-        indexValues[idx + 1] = token
-        neighbors[token] = getNeighbors(token, pairDB)
-
-    for (idx, token) in enumerate(tokens.values()):
-        adjacencyList = []
-        for neighbor in neighbors[token]:
-            if (neighbor in tokens.values()):
-                adjacencyList.append(nodeValues[neighbor])
-        adjacencyList.sort()
-        graph[nodeValues[token]] = adjacencyList
-
-    #Randomize the order of the cycles
-    #So we can "theoretically" check a different
-    #subset of cycles every time
-    timer = time.time()
-    cycles = simple_cycles(graph)
-    cycles = filter(lambda cycle: len(cycle) < 8 and len(cycle) > 2, cycles)
 
     counter = 0
     timer = time.time()
     stepTimer = time.time() #oh no, what are you doing step-timer?
-    cumulativeEaEbTimer = 0
-    fileAccessTimer = 0
-    for cycle in cycles:
+    for cycle in wnat_cycles:
         #Logging
         counter = counter + 1
-        if counter % 1000 == 0:
+        if counter % 10000 == 0:
             print("Cycles checked: {ct} Profitable cycles found: {ppc}, Time since last log: {time}".format(ct=counter, ppc=profitablePathCounter, time=time.time() - stepTimer))
             stepTimer = time.time()
-
-        #Base Case of sorts
-        if profitablePathCounter > 1000 or counter > 15000:
-            break
+        
 
         #Reconstruct path
         reconstructed_cycle = []
-        cycle.append(1) # The algo leaves off the final step back to start, we need it
         for vertex in cycle:
-            reconstructed_cycle.append(indexValues[vertex])
+            reconstructed_cycle.append(node_index_values[vertex])
         
         #Get EaEb for reconstructed cycle
-        eaebTimer = time.time()
-        Ea, Eb, fileAccessTime = getEaEb(from_token, reconstructed_cycle, pairDB)
-        cumulativeEaEbTimer += (time.time() - eaebTimer)
-        fileAccessTimer += fileAccessTime
-
-        if counter % 1000 == 0:
-            print("Time spent on EaEb Calculations: ", cumulativeEaEbTimer)
-            cumulativeEaEbTimer = 0
-            print("File Access Time", fileAccessTimer)
-            fileAccessTimer = 0
+        Ea, Eb = getEaEb(from_token, reconstructed_cycle, pairDB)
 
         #Move on if not profitable
         if (Ea > Eb):
@@ -126,8 +87,9 @@ def findpaths(from_token,
 
         newCycle = {'path': reconstructed_cycle, "Ea": Ea, "Eb": Eb}
         newCycle['optimalAmount'] = getOptimalAmount(Ea, Eb)
+
         #Move on if volume too small
-        if newCycle['optimalAmount'] < 5:
+        if newCycle['optimalAmount'] < 1:
             continue
 
         newCycle['outputAmount'] = getAmountOut(newCycle['optimalAmount'], Ea, Eb)

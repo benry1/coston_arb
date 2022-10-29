@@ -47,7 +47,14 @@ tokens = {
     "CNYX": "0x8d32E20d119d936998575B4AAff66B9999011D27",
 }
 
+
+#
+#       Graph Helpers Initialized once
+#
+#
 pairCache = {}
+wnat_cycles = []
+node_index_values = {}
 
 # deflationaryTokens = ["0xF3D185162E55463264B0d63DD4497093B00F57d1"] # Coston
 deflationaryTokens = ["0x8d32E20d119d936998575B4AAff66B9999011D27"] # Songbird

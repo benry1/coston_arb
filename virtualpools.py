@@ -85,7 +85,7 @@ def getEaEb(tokenIn, path, pairsDB):
             Ea = d1000*Ra*Rb1/(d1000*Rb1+d997*Rb)
             Eb = d997*Rb*Rc/(d1000*Rb1+d997*Rb)
         idx += 1
-    return toInt(Ea), toInt(Eb), fileAccessTime
+    return toInt(Ea), toInt(Eb)
 
 
 def getPool(t0, t1, pairDB):

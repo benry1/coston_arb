@@ -1,3 +1,4 @@
+from johnson import simple_cycles
 from rpc import batchGetReserves
 import settings
 import itertools
@@ -6,7 +7,7 @@ import time
 from web3 import Web3
 from pysondb import db
 
-from graph import findpaths
+from graph import findpaths, getNeighbors
 
 
 # {
@@ -129,6 +130,33 @@ def updatePairReserves():
 
     print("Update took ", time.time() - start)
 
+def initializeCycleList():
+    #Build adjacency list as Johnson's algorithm needs it
+    #Also build an index of node's token value to convert back later
+    neighbors = {}
+    nodeValues = {}
+    graph = {} # Final adjacency list with number values
+    for (idx, token) in enumerate(settings.tokens.values()):
+        nodeValues[token] = idx + 1
+        settings.node_index_values[idx + 1] = token
+        neighbors[token] = getNeighbors(token, pairDB)
+
+    for (idx, token) in enumerate(settings.tokens.values()):
+        adjacencyList = []
+        for neighbor in neighbors[token]:
+            if (neighbor in settings.tokens.values()):
+                adjacencyList.append(nodeValues[neighbor])
+        adjacencyList.sort()
+        graph[nodeValues[token]] = adjacencyList
+
+    
+    #With initialized graph,
+    #Find all cycles through WNAT.
+    timer = time.time()
+    settings.wnat_cycles.extend(simple_cycles(graph))
+    print("Found {} useful cycles in {}".format(len(settings.wnat_cycles), (time.time() - timer)))
+
+
 # Main Loop
 #Returns: -1 on revert, 0 on no opportunities, 1 on success
 def tick() -> int:
@@ -136,13 +164,18 @@ def tick() -> int:
 
     return findpaths(settings.tokens["WNAT"], pairDB, settings.tokens, 'profit')
 
+import cProfile
+import pstats
 # Initialization
 def main():
-
+    print("Hello, Arbitrageur!")
     #Bootstrap with latest tokens and pools
     bootstrapTokenDatabase() #Get token decimals
-    # updatePairDatabase() #Check for any new pairs since last run
+    updatePairDatabase() #Check for any new pairs since last run
     initializePairCache()
+
+    print("Initializing the cycles...")
+    initializeCycleList()
 
     consecutiveReverts = 0
     while True:
