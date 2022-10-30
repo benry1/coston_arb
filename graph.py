@@ -1,37 +1,12 @@
-import json
 import operator
 import time
-import random
 from typing import List
-from collections import deque
 from decimal import Decimal
+
 from do_arb import submitArbitrage
-from johnson import simple_cycles
 from virtualpools import getAmountOut, getEaEb, getOptimalAmount
-from settings import wnat_cycles, node_index_values
-
-
-# Utility function for printing
-# the found path in graph
-def printpath(path: List[int]) -> None:
-     
-    size = len(path)
-    for i in range(size):
-        print(path[i], end = " ")
-         
-    print()
+from settings import wnat_cycles, node_index_values, deflationaryTokens, deflationLevel, pathHistory, statHistory
  
-# Utility function to check if current
-# vertex is already present in path
-def isNotVisited(x: str, path: List[str]) -> int:
- 
-    size = len(path)
-    for i in range(size):
-        if (path[i] == x and i != 0):
-            return 0
-             
-    return 1
-
 def getNeighbors(asset: str, pairDB):
     fullList = pairDB.getByQuery({"token0": asset}) + pairDB.getByQuery({"token1": asset})
     retList = []
@@ -43,15 +18,8 @@ def getNeighbors(asset: str, pairDB):
     retList = list(set(retList))
     return retList
 
-def isDuplicatePath(path, seen):
-    for prof in seen:
-        if path == prof['path']:
-            return True
-    return False
 
-
-#Use Johnson algorithm to quickly find all cycles through WNAT
-#Then compute virtual pool size
+#Compile virtual pool size for all known cycles
 #Optimizations available here, in "getEaEb"... currently ~0.25s/10000 pools
 #Returns: -1 on revert, 0 on no paths found, 1 on success
 def findpaths(from_token, sort_key) -> int:
@@ -97,12 +65,10 @@ def findpaths(from_token, sort_key) -> int:
 
         newCycle['profit'] = newCycle['outputAmount'] - newCycle['optimalAmount']
         newCycle['profitRatio'] = newCycle['outputAmount'] / newCycle['optimalAmount']
-        
-        #Only keep the 10 most profitable trades
-        profitablePaths.append(newCycle)
-        profitablePaths.sort(reverse=True, key=operator.itemgetter(sort_key))
-        profitablePaths = profitablePaths[:10]
-        profitablePathCounter += 1
+
+        #Congrats - you found a reasonably profitable trade!
+        #Now .... is it REALLY worth it?
+        profitablePaths, profitablePathCounter = vetOpportunity(newCycle, profitablePaths, profitablePathCounter, sort_key)
 
     print("Done searching, found ", profitablePathCounter, " in ", time.time() - timer)
     print(profitablePaths)
@@ -113,3 +79,32 @@ def findpaths(from_token, sort_key) -> int:
         return submitArbitrage(execute["path"], execute["optimalAmount"], execute["outputAmount"])
     else:
         return 0
+
+#Returns: (profitablePathList, #ProfitablePaths, profitablePaths)
+def vetOpportunity(newCycle, profitablePathList, profitablePaths, sort_key):
+    #Enough profit to offset deflationary tokens?
+    path = newCycle["path"]
+    requiredProfit = 1.001
+    for token in deflationaryTokens:
+        if token in path:
+            requiredProfit *= deflationLevel[token]
+
+    requiredProfit = Decimal(requiredProfit)
+
+    if newCycle["profitRatio"] < requiredProfit:
+        print("Ignoring because {} < {}".format(newCycle['profitRatio'], requiredProfit))
+        return profitablePathList, profitablePaths
+
+    #Has this same path failed recently?
+    for i in reversed(range(len(pathHistory))):
+        if newCycle["path"] == pathHistory[i] and statHistory[i] <= 0:
+            print("Ignoring because this path reverted recently.")
+            return profitablePathList, profitablePaths
+
+    #Only keep the 10 most profitable trades
+    profitablePathList.append(newCycle)
+    profitablePathList.sort(reverse=True, key=operator.itemgetter(sort_key))
+    profitablePathList = profitablePathList[:10]
+    profitablePaths += 1
+    return profitablePathList, profitablePaths
+

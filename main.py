@@ -130,6 +130,8 @@ def updatePairReserves():
 
     print("Update took ", time.time() - start)
 
+
+#Use modified Johnson algorithm to quickly find all cycles through WNAT
 def initializeCycleList():
     #Build adjacency list as Johnson's algorithm needs it
     #Also build an index of node's token value to convert back later
@@ -156,7 +158,7 @@ def initializeCycleList():
     cycles_generator = simple_cycles(graph)
     #Limit to length 6 cycles. Question - How low is practical?
     #So far, no difference in opportunities down to <6.
-    cycles = filter(lambda cycle: len(cycle) < 7 and len(cycle) > 2, cycles_generator)
+    cycles = filter(lambda cycle: len(cycle) < 9 and len(cycle) > 2, cycles_generator)
     for cycle in cycles:
         cycle.append(1)
         settings.wnat_cycles.append(cycle)
@@ -168,7 +170,7 @@ def initializeCycleList():
 def tick() -> int:
     updatePairReserves()
 
-    return findpaths(settings.tokens["WNAT"], 'profit')
+    return findpaths(settings.tokens["WNAT"], 'profitRatio')
 
 import cProfile
 import pstats

@@ -36,7 +36,7 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
     if not settings.debug:
         acct = settings.RPC.eth.account.privateKeyToAccount(settings.config["privateKey"])
         tx = ArbitrageContract.functions.executeArb(
-                        int(executionAmount * 10**18), 
+                        int(executionAmount * wnat_multiplier), 
                         int((executionAmount + 1) * wnat_multiplier), #Require at least 1 token profit
                         path,
                         isDeflationary).build_transaction({
@@ -57,9 +57,19 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
         status = "Success" if tx_receipt["status"] != 0 else "Revert"
         print(status, gas)
 
+    ret = 0
+    if not settings.debug:
+        ret = 1 if status == "Success" else -1
+
     #
     #   Logging
     #
+
+    settings.pathHistory.append(path)
+    settings.statHistory.append(ret)
+    if len(settings.pathHistory) > 5:
+        settings.pathHistory.pop(0)
+        settings.statHistory.pop(0)
 
     #TODO: How to get actual profit output from chain ??
 
@@ -76,10 +86,6 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
     logFile = open("./log/log.txt", "a")
     logFile.write(logMessage)
     logFile.close()
-
-    ret = 0
-    if not settings.debug:
-        ret = 1 if status == "Success" else -1
 
     return ret
 
