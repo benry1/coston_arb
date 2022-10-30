@@ -18,6 +18,9 @@ def simple_cycles(G):
                 B[node].clear()
     G = {v: set(nbrs) for (v,nbrs) in G.items()} # make a copy of the graph
     sccs = strongly_connected_components(G)
+    #Added - exclde any SCC that doesn't have WNAT
+    sccs = list(filter(lambda component: 0 in component, sccs))
+    print(sccs) 
     while sccs:
         scc = sccs.pop()
         startnode = scc.pop()

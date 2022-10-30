@@ -12,9 +12,9 @@ def getNeighbors(asset: str, pairDB):
     retList = []
     for pair in fullList:
         if (asset == pair["token0"]):
-            retList.append(pair["token1"])
+            retList.append((pair["exchange"], pair["token1"]))
         else:
-            retList.append(pair["token0"])
+            retList.append((pair["exchange"], pair["token0"]))
     retList = list(set(retList))
     return retList
 
@@ -33,7 +33,7 @@ def findpaths(from_token, sort_key) -> int:
     for cycle in wnat_cycles:
         #Logging
         counter = counter + 1
-        if counter % 10000 == 0:
+        if counter % 100000 == 0:
             print("Cycles checked: {ct} Profitable cycles found: {ppc}, Time since last log: {time}".format(ct=counter, ppc=profitablePathCounter, time=time.time() - stepTimer))
             stepTimer = time.time()
         
