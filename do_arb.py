@@ -77,5 +77,9 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
     logFile.write(logMessage)
     logFile.close()
 
-    return 1 if status == "Success" else -1
+    ret = 0
+    if not settings.debug:
+        ret = 1 if status == "Success" else -1
+
+    return ret
 

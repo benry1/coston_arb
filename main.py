@@ -153,7 +153,13 @@ def initializeCycleList():
     #With initialized graph,
     #Find all cycles through WNAT.
     timer = time.time()
-    settings.wnat_cycles.extend(simple_cycles(graph))
+    cycles_generator = simple_cycles(graph)
+    #Limit to length 6 cycles. Question - How low is practical?
+    #So far, no difference in opportunities down to <6.
+    cycles = filter(lambda cycle: len(cycle) < 7 and len(cycle) > 2, cycles_generator)
+    for cycle in cycles:
+        cycle.append(1)
+        settings.wnat_cycles.append(cycle)
     print("Found {} useful cycles in {}".format(len(settings.wnat_cycles), (time.time() - timer)))
 
 
