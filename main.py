@@ -1,3 +1,5 @@
+import json
+import readline
 from johnson import simple_cycles
 from rpc import batchGetReserves
 import settings
@@ -38,7 +40,7 @@ OracleSwapContract = settings.RPC.eth.contract(address=OracleSwapFactoryAddress,
 PangolinFactoryAddress = "0xB66E62b25c42D55655a82F8ebf699f2266f329FB"
 PangolinFactoryContract = settings.RPC.eth.contract(address=PangolinFactoryAddress, abi=settings.OracleSwapFactoryABI)
 
-exchanges = ["oracleswap"]
+exchanges = ["oracleswap", "pangolin"]
 contracts = {
     "pangolin": PangolinFactoryContract,
     "oracleswap": OracleSwapContract
@@ -87,16 +89,16 @@ def updatePairDatabase():
                 d0 = tokenDB.getByQuery({"address": t0})[0]["decimals"]
                 d1 = tokenDB.getByQuery({"address": t1})[0]["decimals"]
                 if (r0 / 10**d0 < minReserve) or (r1 / 10**d1 < minReserve):
-                    print(exchange, token0, token1, " liquidity too low")
+                    print(exchange, token0, r0 / 10**d0, token1, r1 / 10**d1 < minReserve, " liquidity too low")
                     continue
                 s0 = token0 if settings.tokens[token0] == t0 else token1
                 s1 = token1 if s0 == token0 else token0
                 pairDB.add({   "token0": t0,
                                 "symbol0": s0,
-                                "reserve0": r0,
+                                "reserve0": r0 / 10**d0,
                                 "token1": t1,
                                 "symbol1": s1,
-                                "reserve1": r1,
+                                "reserve1": r1 / 10**d1,
                                 "pairAddress": pairAddress,
                                 "exchange": exchange
                         })
@@ -155,19 +157,20 @@ def initializeCycleList():
     nodeValues = {}
     graph = {} # Final adjacency list with number values
     nodeValues[("source", settings.tokens["WNAT"])] = 0 #Hard code the start node as a non-exchange-affiliated WNAT
+    settings.node_index_values["0"] = ("source", settings.tokens["WNAT"])
     index = 0
     for (token) in settings.tokens.values():
         for exchange in exchanges:
             index += 1
             nodeValues[(exchange, token)] = index
-            settings.node_index_values[index] = token
+            settings.node_index_values[str(index)] = (exchange, token)
             if token == settings.tokens["WNAT"]:
                 neighbors[(exchange, token)] = [("source", token)]
                 neighbors[("source", token)] = getNeighbors(token, pairDB)
             else:
                 neighbors[(exchange, token)] = getNeighbors(token, pairDB)
 
-    print(nodeValues)
+    print(settings.node_index_values)
 
     #Give zero element connectivity manually
     sourceAdjacencyList = []
@@ -193,11 +196,43 @@ def initializeCycleList():
     cycles_generator = simple_cycles(graph)
     #Limit to length 6 cycles. Question - How low is practical?
     #So far, no difference in opportunities down to <6.
-    cycles = filter(lambda cycle: len(cycle) < 9 and len(cycle) > 2, cycles_generator)
-    for cycle in cycles:
-        cycle.append(0)
-        settings.wnat_cycles.append(cycle)
+    cycles = filter(lambda cycle: len(cycle) < 10 and len(cycle) > 3, cycles_generator)
+    i = 0
+    with open("./data/cycles.txt", "w") as file:
+        for cycle in cycles:
+            i+=1
+            if (i % 10000 == 0):
+                print(cycle)
+            cycle.append(0)
+            settings.wnat_cycles.append(cycle)
+            
+            
+            line_str = [str(n) for n in cycle]
+            file.write(" ".join(line_str) + "\n")
+    
+    with open("./data/index_values.json", "w") as file:
+        json.dump(settings.node_index_values, file)
     print("Found {} useful cycles in {}".format(len(settings.wnat_cycles), (time.time() - timer)))
+
+def readCycleList():
+    timer = time.time()
+    with open("./data/cycles.txt", "r") as file:
+        line = file.readline()
+        count = 0
+        while line:
+            split = line.split(" ")
+            cycle = (int(i) for i in split)
+            settings.wnat_cycles.append(list(cycle))
+            count += 1
+            line = file.readline()
+    
+    with open("./data/index_values.json", "r") as file:
+        data = json.load(file)
+        for key in data.keys():
+            settings.node_index_values[key] = data[key]
+    
+    print(settings.node_index_values)
+    print("Read {} cycles in {} seconds".format(count, (time.time() - timer)))
 
 
 # Main Loop
@@ -205,24 +240,28 @@ def initializeCycleList():
 def tick() -> int:
     updatePairReserves()
 
-    return findpaths(settings.tokens["WNAT"], 'profitRatio')
+    return findpaths(settings.tokens["WNAT"], 'profit')
 
 import cProfile
 import pstats
 # Initialization
 def main():
+    bootstrap = True
     print("Hello, Arbitrageur!")
     #Bootstrap with latest tokens and pools
-    bootstrapTokenDatabase() #Get token decimals
-    # updatePairDatabase() #Check for any new pairs since last run
-    initializePairCache()
-
-    print("Initializing the cycles...")
-    initializeCycleList()
+    if bootstrap:
+        bootstrapTokenDatabase() #Get token decimals
+        updatePairDatabase() #Check for any new pairs since last run
+        print("Initializing the cycles...")
+        initializeCycleList()
+    else:
+        print("Reading cycle list...")
+        readCycleList()
+    initializePairCache()    
 
     # consecutiveReverts = 0
     # while True:
-    #     status = tick()
+    status = tick()
     #     if status < 0:
     #         consecutiveReverts += 1
     #     else:

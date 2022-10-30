@@ -39,9 +39,10 @@ def findpaths(from_token, sort_key) -> int:
         
 
         #Reconstruct path
+        #[("source", wnat), (exchange, token) .... (exchange, wnat)]
         reconstructed_cycle = []
         for vertex in cycle:
-            reconstructed_cycle.append(node_index_values[vertex])
+            reconstructed_cycle.append(node_index_values[str(vertex)])
         
         #Get EaEb for reconstructed cycle
         Ea, Eb = getEaEb(from_token, reconstructed_cycle)
@@ -84,10 +85,11 @@ def findpaths(from_token, sort_key) -> int:
 def vetOpportunity(newCycle, profitablePathList, profitablePaths, sort_key):
     #Enough profit to offset deflationary tokens?
     path = newCycle["path"]
-    requiredProfit = 1.001
-    for token in deflationaryTokens:
-        if token in path:
+    requiredProfit = 0.9#1.001
+    for (exchange, token) in path:
+        if (token in deflationaryTokens):
             requiredProfit *= deflationLevel[token]
+            
 
     requiredProfit = Decimal(requiredProfit)
 

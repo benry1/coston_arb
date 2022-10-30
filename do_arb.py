@@ -5,7 +5,51 @@ from datetime import datetime
 
 ArbitrageContract = settings.RPC.eth.contract(address=settings.ArbitrageAddress, abi=settings.ArbitrageABI)
 
-#TODO: Support triangles around multiple exchanges. Requires contract updates
+#In: [("source", wnat), (exch1, token), (exch2, token), ... ,(exch, wnat), ("source", wnat)]
+#Out: Paths       : [[wnat, token1, token2], [token3, token4], [token5, wnat]]
+#     Exchanges   : [   exch1,                   exch2,           exch3]
+#     Deflationary: [    true                      false          false]
+#TODO: Implement
+def parsePath(path):
+    paths = []
+    exchanges = []
+    deflationary = []
+
+    #Step is (exchange, token)
+    lastToken = settings.tokens["WNAT"]
+    lastExch  = "source"
+    currentPath = []
+    for (exchange, token) in path:
+        print(exchange, token)
+        #Time to end the path
+        # if token == settings.tokens["WNAT"] and exchange != "source":
+        #     print("Base")
+        #     currentPath.append(token)
+        #     exchanges.append(exchange)
+        #     break
+        if exchange != lastExch and lastExch != "source":
+            print("New exch")
+            paths.append(currentPath)
+            exchanges.append(lastExch)
+            currentPath = [lastToken, token]
+        else:
+            print("Continue")
+            currentPath.append(token)
+
+        lastToken = token
+        lastExch = exchange
+
+    #Now check deflationary status for each path
+    for path in paths:
+        hasDeflationary = False
+        for token in settings.deflationaryTokens:
+            if token in path and path[-1] != token:
+                hasDeflationary = True
+        deflationary.append(hasDeflationary)
+
+        
+    return paths, exchanges, deflationary
+
 #TODO: Support more than WNAT cycles
 #returns: -1 on revert, 1 on success
 def submitArbitrage(path, amountIn, expectedOut) -> int :
@@ -14,11 +58,12 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
     # Get Transaction settings
     #
 
-    #Is Deflationary?
-    isDeflationary = False
-    for token in settings.deflationaryTokens:
-        if (token in path):
-            isDeflationary = True
+    #Deparse the path
+    paths, exchanges, deflationary = parsePath(path)
+    print(path)
+    print(paths)
+    print(exchanges)
+    print(deflationary)
     
     #Available Balance? Assumes WNAT for now..
     executionAmount = amountIn
@@ -33,13 +78,14 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
     gas = 0
     status = "Debug"
 
+    #TODO: update this after ABI is updated to support multi-exchange
     if not settings.debug:
         acct = settings.RPC.eth.account.privateKeyToAccount(settings.config["privateKey"])
         tx = ArbitrageContract.functions.executeArb(
                         int(executionAmount * wnat_multiplier), 
                         int((executionAmount + 1) * wnat_multiplier), #Require at least 1 token profit
                         path,
-                        isDeflationary).build_transaction({
+                        False).build_transaction({
                             'from': acct.address,
                             'nonce': settings.RPC.eth.getTransactionCount(acct.address),
                             'gas': 3000000
@@ -80,7 +126,7 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
                     + "Optimal: " + str(amountIn) + " Optimal Out: " + str(expectedOut) + "\n"\
                     + "Actual In: " + str(executionAmount) + "\n"\
                     + "Path: " + str(path) + "\n"\
-                    + "Includes Deflationary: " + str(isDeflationary) + "\n"\
+                    + "Includes Deflationary: " + str(False) + "\n"\
                     + "Gas Burnt: " + str(gas) + " Status: " + status + "\n\n"
     
     logFile = open("./log/log.txt", "a")
