@@ -40,7 +40,7 @@ OracleSwapContract = settings.RPC.eth.contract(address=OracleSwapFactoryAddress,
 PangolinFactoryAddress = "0xB66E62b25c42D55655a82F8ebf699f2266f329FB"
 PangolinFactoryContract = settings.RPC.eth.contract(address=PangolinFactoryAddress, abi=settings.OracleSwapFactoryABI)
 
-exchanges = ["oracleswap", "pangolin"]
+exchanges = ["oracleswap"]#, "pangolin"]
 contracts = {
     "pangolin": PangolinFactoryContract,
     "oracleswap": OracleSwapContract
@@ -60,6 +60,7 @@ def bootstrapTokenDatabase():
 # Initialize function - not meant to update reserve values
 def updatePairDatabase():
     allPairs = itertools.product(settings.tokens.keys(), repeat=2)
+    
     for (token0, token1) in allPairs:
         if (token0 == token1):
             continue
@@ -85,12 +86,16 @@ def updatePairDatabase():
                 t0 = pairContract.functions.token0().call()
                 t1 = pairContract.functions.token1().call()
                 #Determine if there is enough reserve to be worth it
-                minReserve = 10
-                d0 = tokenDB.getByQuery({"address": t0})[0]["decimals"]
-                d1 = tokenDB.getByQuery({"address": t1})[0]["decimals"]
-                if (r0 / 10**d0 < minReserve) or (r1 / 10**d1 < minReserve):
-                    print(exchange, token0, r0 / 10**d0, token1, r1 / 10**d1 < minReserve, " liquidity too low")
+                tokenInfo0 = tokenDB.getByQuery({"address": t0})[0]
+                tokenInfo1 = tokenDB.getByQuery({"address": t1})[0]
+                d0 = tokenInfo0["decimals"]
+                d1 = tokenInfo1["decimals"]
+                if (r0 / 10**d0 < settings.minReserve[tokenInfo0["symbol"]]) or (r1 / 10**d1 < settings.minReserve[tokenInfo1["symbol"]]):
+                    print(exchange, token0, r0 / 10**d0, token1, r1 / 10**d1, " liquidity too low")
                     continue
+
+
+                print(token0, token1, exchange)
                 s0 = token0 if settings.tokens[token0] == t0 else token1
                 s1 = token1 if s0 == token0 else token0
                 pairDB.add({   "token0": t0,
@@ -104,7 +109,7 @@ def updatePairDatabase():
                         })
             except Exception as e:
                 #Invalid pair
-                print(exchange, token0, token1, "failed")
+                # print(exchange, token0, token1, "failed", type(e))
                 continue
 
 
@@ -112,6 +117,7 @@ def initializePairCache():
     #Get all token address pairs
     allPairs = itertools.product(settings.tokens.values(), repeat=2)
 
+    
     for (token0, token1) in allPairs:
         for exchange in exchanges:
             if (token0 == token1):
@@ -141,6 +147,9 @@ def updatePairReserves():
                 {"pairAddress": pair["pairAddress"]}, 
                 {"reserve0": pair["reserve0"] / pow(10, d0), "reserve1": pair["reserve1"]/pow(10, d1) }
             )
+
+        if pair["exchange"] not in exchanges:
+            continue
         
         #Update pairCache
         settings.pairCache[(pair["exchange"], pair["token0"], pair["token1"])]["reserve0"] = pair["reserve0"] / pow(10, d0)
@@ -170,7 +179,7 @@ def initializeCycleList():
             else:
                 neighbors[(exchange, token)] = getNeighbors(token, pairDB)
 
-    print(settings.node_index_values)
+    print(neighbors)
 
     #Give zero element connectivity manually
     sourceAdjacencyList = []
@@ -250,8 +259,10 @@ def main():
     print("Hello, Arbitrageur!")
     #Bootstrap with latest tokens and pools
     if bootstrap:
+        print("Bootstrapping token DB")
         bootstrapTokenDatabase() #Get token decimals
-        updatePairDatabase() #Check for any new pairs since last run
+        print("Updating Pair DB")
+        # updatePairDatabase() #Check for any new pairs since last run
         print("Initializing the cycles...")
         initializeCycleList()
     else:
@@ -261,7 +272,7 @@ def main():
 
     # consecutiveReverts = 0
     # while True:
-    status = tick()
+    #     status = tick()
     #     if status < 0:
     #         consecutiveReverts += 1
     #     else:

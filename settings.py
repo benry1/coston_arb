@@ -60,6 +60,21 @@ tokens = {
     "CNYX": "0x8d32E20d119d936998575B4AAff66B9999011D27",
 }
 
+minReserve = {
+    "WNAT": 1000,
+    "SFORT": 100,
+    "sDOOD": 100,
+    "ORACLE": 100,
+    "xORACLE": 100,
+    "PRO": 150,
+    "HS": 1000,
+    "EXFI": 250,
+    "SFIN": 0.1,
+    "CAND": 250,
+    # "COOT": "0x1A3d09Ece7268c3cE3e6b5457978EaDaF5A6811A", #TODO: This is an ERC721 ?
+    "CNYX": 100000,
+}
+
 
 # deflationaryTokens = ["0xF3D185162E55463264B0d63DD4497093B00F57d1"] # Coston
 deflationaryTokens = ["0x8d32E20d119d936998575B4AAff66B9999011D27", '0xf810576A68C3731875BDe07404BE815b16fC0B4e'] # Songbird

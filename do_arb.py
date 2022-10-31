@@ -20,7 +20,6 @@ def parsePath(path):
     lastExch  = "source"
     currentPath = []
     for (exchange, token) in path:
-        print(exchange, token)
         #Time to end the path
         # if token == settings.tokens["WNAT"] and exchange != "source":
         #     print("Base")
@@ -28,12 +27,10 @@ def parsePath(path):
         #     exchanges.append(exchange)
         #     break
         if exchange != lastExch and lastExch != "source":
-            print("New exch")
             paths.append(currentPath)
             exchanges.append(lastExch)
             currentPath = [lastToken, token]
         else:
-            print("Continue")
             currentPath.append(token)
 
         lastToken = token
