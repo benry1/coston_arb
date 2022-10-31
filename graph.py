@@ -55,7 +55,7 @@ def findpaths(from_token, sort_key) -> int:
         newCycle['optimalAmount'] = getOptimalAmount(Ea, Eb)
 
         #Move on if volume too small
-        if newCycle['optimalAmount'] < 1:
+        if newCycle['optimalAmount'] < 10:
             continue
 
         newCycle['outputAmount'] = getAmountOut(newCycle['optimalAmount'], Ea, Eb)
@@ -85,7 +85,7 @@ def findpaths(from_token, sort_key) -> int:
 def vetOpportunity(newCycle, profitablePathList, profitablePaths, sort_key):
     #Enough profit to offset deflationary tokens?
     path = newCycle["path"]
-    requiredProfit = 0.9#1.001
+    requiredProfit = 1.001
     for (exchange, token) in path:
         if (token in deflationaryTokens):
             requiredProfit *= deflationLevel[token]

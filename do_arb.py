@@ -1,4 +1,5 @@
 #Actually interact with our arb contract
+from hexbytes import HexBytes
 import settings
 from datetime import datetime
 
@@ -70,6 +71,7 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
         available = available / wnat_multiplier
         executionAmount = min(amountIn, int(available))
 
+    requiredOutput = (executionAmount + 1) #Require at least 1 token profit
     
     tx_hash = "0xdebug"
     gas = 0
@@ -77,28 +79,30 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
 
     #TODO: update this after ABI is updated to support multi-exchange
     if not settings.debug:
+        print("Sending tx")
         acct = settings.RPC.eth.account.privateKeyToAccount(settings.config["privateKey"])
         tx = ArbitrageContract.functions.executeArb(
                         int(executionAmount * wnat_multiplier), 
-                        int((executionAmount + 1) * wnat_multiplier), #Require at least 1 token profit
-                        path,
-                        False).build_transaction({
+                        int(requiredOutput * wnat_multiplier), 
+                        paths,
+                        exchanges,
+                        deflationary).build_transaction({
                             'from': acct.address,
                             'nonce': settings.RPC.eth.getTransactionCount(acct.address),
                             'gas': 3000000
                         })
-        print("signing")
         signed = acct.signTransaction(tx)
-
-        print("sending")
         tx_hash = settings.RPC.eth.sendRawTransaction(signed.rawTransaction)
+        
 
         print("Waiting for receipt")
         tx_receipt = settings.RPC.eth.wait_for_transaction_receipt(tx_hash)
-        print(tx_receipt)
         gas = tx_receipt["effectiveGasPrice"] / 10**18 * tx_receipt["gasUsed"]
-        status = "Success" if tx_receipt["status"] != 0 else "Revert"
+        status = "Success" if tx_receipt["status"] != 0 else "Revert:"
         print(status, gas)
+
+        if (tx_receipt["status"] == 0):
+            status = status + " " + diagnoseRevert(tx_hash)
 
     ret = 0
     if not settings.debug:
@@ -114,14 +118,11 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
         settings.pathHistory.pop(0)
         settings.statHistory.pop(0)
 
-    #TODO: How to get actual profit output from chain ??
-
     now = datetime.now()
     dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-    print("date and time =", dt_string)
     logMessage = "Found arb opportunity at " + str(dt_string) + ":\n"\
                     + "Optimal: " + str(amountIn) + " Optimal Out: " + str(expectedOut) + "\n"\
-                    + "Actual In: " + str(executionAmount) + "\n"\
+                    + "Actual In: " + str(executionAmount) + " Min Out: " + str(requiredOutput) + "\n"\
                     + "Path: " + str(path) + "\n"\
                     + "Includes Deflationary: " + str(False) + "\n"\
                     + "Gas Burnt: " + str(gas) + " Status: " + status + "\n\n"
@@ -132,3 +133,21 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
 
     return ret
 
+def diagnoseRevert(tx_hash):
+    print("Getting revert reason...")
+    tx = settings.RPC.eth.getTransaction(tx_hash.hex())
+    tx_rebuilt = {}
+
+    for key in tx.keys():
+        if isinstance(tx[key], HexBytes):
+            tx_rebuilt[key] = tx[key].hex()
+        else:
+            tx_rebuilt[key] = tx[key]
+    tx_rebuilt.pop("gasPrice")
+
+    message = "Uknown"
+    try:
+        result = settings.RPC.eth.call(tx_rebuilt, tx_rebuilt["blockNumber"] - 1, {})
+    except Exception as e:
+        message = str(e)
+    return message

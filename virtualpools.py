@@ -88,7 +88,7 @@ def getEaEb(tokenIn, path):
 
 
 def getPool(t0, t1, exchange):
-    if (t0 < t1):
+    if (t0.lower() < t1.lower()):
         return pairCache[(exchange, t0, t1)]
     else:
         return pairCache[(exchange, t1, t0)]

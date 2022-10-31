@@ -40,10 +40,11 @@ OracleSwapContract = settings.RPC.eth.contract(address=OracleSwapFactoryAddress,
 PangolinFactoryAddress = "0xB66E62b25c42D55655a82F8ebf699f2266f329FB"
 PangolinFactoryContract = settings.RPC.eth.contract(address=PangolinFactoryAddress, abi=settings.OracleSwapFactoryABI)
 
-exchanges = ["oracleswap"]#, "pangolin"]
+exchanges = ["blazeswap"]#["oracleswap", "pangolin"]
 contracts = {
     "pangolin": PangolinFactoryContract,
-    "oracleswap": OracleSwapContract
+    "oracleswap": OracleSwapContract,
+    "blazeswap": BlazeSwapContract
 }
 
 # Save token info if not exist
@@ -90,7 +91,7 @@ def updatePairDatabase():
                 tokenInfo1 = tokenDB.getByQuery({"address": t1})[0]
                 d0 = tokenInfo0["decimals"]
                 d1 = tokenInfo1["decimals"]
-                if (r0 / 10**d0 < settings.minReserve[tokenInfo0["symbol"]]) or (r1 / 10**d1 < settings.minReserve[tokenInfo1["symbol"]]):
+                if (r0 / 10**d0 <= settings.minReserve[tokenInfo0["symbol"]]) or (r1 / 10**d1 <= settings.minReserve[tokenInfo1["symbol"]]):
                     print(exchange, token0, r0 / 10**d0, token1, r1 / 10**d1, " liquidity too low")
                     continue
 
@@ -109,11 +110,12 @@ def updatePairDatabase():
                         })
             except Exception as e:
                 #Invalid pair
-                # print(exchange, token0, token1, "failed", type(e))
+                print(exchange, token0, token1, "failed", type(e))
                 continue
 
 
 def initializePairCache():
+    print("Cacheing all pairs")
     #Get all token address pairs
     allPairs = itertools.product(settings.tokens.values(), repeat=2)
 
@@ -123,11 +125,11 @@ def initializePairCache():
             if (token0 == token1):
                 continue
             #Sort alphabetically
-            if (token0 > token1):
+            if (token0.lower() > token1.lower()):
                 temp = token1
                 token1 = token0
                 token0 = temp
-            
+
             pairEntry = pairDB.getByQuery({"token0": token0, "token1": token1, "exchange": exchange})
             if len(pairEntry) > 0:
                 settings.pairCache[(exchange, token0, token1)] = pairEntry[0]
@@ -135,7 +137,12 @@ def initializePairCache():
         
 def updatePairReserves():
     allPairObjects = pairDB.getAll()
-
+    allPairObjects = list(
+                        filter(
+                            lambda pair: 
+                                pair["exchange"] in exchanges and 
+                                pair["symbol0"] in settings.tokens.keys() and
+                                pair["symbol1"] in settings.tokens.keys(), allPairObjects))
     start = time.time()
     #BATCHED
     updatedPairs = batchGetReserves(allPairObjects)
@@ -197,8 +204,8 @@ def initializeCycleList():
             adjacencyList.sort()
             graph[nodeValues[(exchange, token)]] = adjacencyList
 
-    print(graph)
-    print(nodeValues)    
+    # print(graph)
+    # print(nodeValues)    
     #With initialized graph,
     #Find all cycles through WNAT.
     timer = time.time()
@@ -249,13 +256,13 @@ def readCycleList():
 def tick() -> int:
     updatePairReserves()
 
-    return findpaths(settings.tokens["WNAT"], 'profit')
+    return findpaths(settings.tokens["WNAT"], 'profitRatio')
 
 import cProfile
 import pstats
 # Initialization
 def main():
-    bootstrap = True
+    bootstrap = False
     print("Hello, Arbitrageur!")
     #Bootstrap with latest tokens and pools
     if bootstrap:
@@ -272,7 +279,7 @@ def main():
 
     # consecutiveReverts = 0
     # while True:
-    #     status = tick()
+    status = tick()
     #     if status < 0:
     #         consecutiveReverts += 1
     #     else:
