@@ -5,6 +5,28 @@ from web3._utils.request import make_post_request
 from web3 import HTTPProvider
 from eth_abi import decode_abi
 
+
+def handle_event(event):
+    event_json = json.loads(settings.RPC.toJSON(event))["args"]
+    print("EVENT:", event_json)
+    #Upsert the trade with AmountOut and Profit information
+    event_json["endBalance"] = event_json["endBalance"] / settings.wnat_multiplier
+    event_json["startBalance"]  = event_json["startBalance"] / settings.wnat_multiplier
+    event_json["profit"]  = event_json["profit"] / settings.wnat_multiplier
+    settings.tradesCollection.update_one(
+            {
+                "tradeId": event_json["id"]
+            },
+            {
+                "$set": {
+                    "tradeId": event_json["id"],
+                    "profit": (event_json["profit"]),
+                    "event": event_json
+                }
+            },
+            upsert=True
+        )
+
 def generateJsonRpc(method, params, request_id=1):
     return {
         'jsonrpc': '2.0',

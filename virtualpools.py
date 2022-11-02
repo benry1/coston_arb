@@ -30,13 +30,6 @@ def getOptimalAmount(Ea, Eb):
 def toInt(n):
     return Decimal(int(n))
 
-## TODO: To keep as decimals, or adjust all to BigInts?
-def adjustReserve(token, amount):
-    # res = Decimal(amount)*Decimal(pow(10, 18-token['decimal']))
-    # return Decimal(int(res))
-    return Decimal(amount)
-
-
 def getEaEb(tokenIn, path):
     pairs = getPairsInPath(path)
 
@@ -86,15 +79,18 @@ def getEaEb(tokenIn, path):
     return toInt(Ea), toInt(Eb)
 
 
-def getPool(t0, t1):
-    if (t0 < t1):
-        return pairCache[(t0, t1)]
+
+def getPool(t0, t1, exchange):
+    if (t0.lower() < t1.lower()):
+        return pairCache[(exchange, t0, t1)]
     else:
-        return pairCache[(t1, t0)]
+        return pairCache[(exchange, t1, t0)]
 
 def getPairsInPath(path):
     retPools = []
     for i in range(len(path) - 1):
-        retPools.append(getPool(path[i], path[i+1]))
+        if (path[i][1] == path[i + 1][1]):
+            continue
+        retPools.append(getPool(path[i][1], path[i+1][1], path[i+1][0]))
     
     return retPools

@@ -12,9 +12,9 @@ def getNeighbors(asset: str, pairDB):
     retList = []
     for pair in fullList:
         if (asset == pair["token0"]):
-            retList.append(pair["token1"])
+            retList.append((pair["exchange"], pair["token1"]))
         else:
-            retList.append(pair["token0"])
+            retList.append((pair["exchange"], pair["token0"]))
     retList = list(set(retList))
     return retList
 
@@ -33,15 +33,16 @@ def findpaths(from_token, sort_key) -> int:
     for cycle in wnat_cycles:
         #Logging
         counter = counter + 1
-        if counter % 10000 == 0:
+        if counter % 100000 == 0:
             print("Cycles checked: {ct} Profitable cycles found: {ppc}, Time since last log: {time}".format(ct=counter, ppc=profitablePathCounter, time=time.time() - stepTimer))
             stepTimer = time.time()
         
 
         #Reconstruct path
+        #[("source", wnat), (exchange, token) .... (exchange, wnat)]
         reconstructed_cycle = []
         for vertex in cycle:
-            reconstructed_cycle.append(node_index_values[vertex])
+            reconstructed_cycle.append(node_index_values[str(vertex)])
         
         #Get EaEb for reconstructed cycle
         Ea, Eb = getEaEb(from_token, reconstructed_cycle)
@@ -54,7 +55,7 @@ def findpaths(from_token, sort_key) -> int:
         newCycle['optimalAmount'] = getOptimalAmount(Ea, Eb)
 
         #Move on if volume too small
-        if newCycle['optimalAmount'] < 1:
+        if newCycle['optimalAmount'] < 10:
             continue
 
         newCycle['outputAmount'] = getAmountOut(newCycle['optimalAmount'], Ea, Eb)
@@ -71,7 +72,7 @@ def findpaths(from_token, sort_key) -> int:
         profitablePaths, profitablePathCounter = vetOpportunity(newCycle, profitablePaths, profitablePathCounter, sort_key)
 
     print("Done searching, found ", profitablePathCounter, " in ", time.time() - timer)
-    print(profitablePaths)
+    # print(profitablePaths)
 
     #Naively execute the best opportunity
     if len(profitablePaths) > 0:
@@ -85,14 +86,15 @@ def vetOpportunity(newCycle, profitablePathList, profitablePaths, sort_key):
     #Enough profit to offset deflationary tokens?
     path = newCycle["path"]
     requiredProfit = 1.001
-    for token in deflationaryTokens:
-        if token in path:
+    for (exchange, token) in path:
+        if (token in deflationaryTokens):
             requiredProfit *= deflationLevel[token]
+            
 
     requiredProfit = Decimal(requiredProfit)
 
     if newCycle["profitRatio"] < requiredProfit:
-        print("Ignoring because {} < {}".format(newCycle['profitRatio'], requiredProfit))
+        # print("Ignoring because {} < {}".format(newCycle['profitRatio'], requiredProfit))
         return profitablePathList, profitablePaths
 
     #Has this same path failed recently?

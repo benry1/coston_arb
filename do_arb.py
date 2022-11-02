@@ -1,11 +1,45 @@
 #Actually interact with our arb contract
+from decimal import Decimal
+from hexbytes import HexBytes
 import settings
+import time
 from datetime import datetime
 
+#In: [("source", wnat), (exch1, token), (exch2, token), ... ,(exch, wnat), ("source", wnat)]
+#Out: Paths       : [[wnat, token1, token2], [token3, token4], [token5, wnat]]
+#     Exchanges   : [   exch1,                   exch2,           exch3]
+#     Deflationary: [    true                      false          false]
+def parsePath(path):
+    paths = []
+    exchanges = []
+    deflationary = []
 
-ArbitrageContract = settings.RPC.eth.contract(address=settings.ArbitrageAddress, abi=settings.ArbitrageABI)
+    #Step is (exchange, token)
+    lastToken = settings.tokens["WNAT"]
+    lastExch  = "source"
+    currentPath = []
+    for (exchange, token) in path:
+        if exchange != lastExch and lastExch != "source":
+            paths.append(currentPath)
+            exchanges.append(lastExch)
+            currentPath = [lastToken, token]
+        else:
+            currentPath.append(token)
 
-#TODO: Support triangles around multiple exchanges. Requires contract updates
+        lastToken = token
+        lastExch = exchange
+
+    #Now check deflationary status for each path
+    for path in paths:
+        hasDeflationary = False
+        for token in settings.deflationaryTokens:
+            if token in path and path[-1] != token:
+                hasDeflationary = True
+        deflationary.append(hasDeflationary)
+
+        
+    return paths, exchanges, deflationary
+
 #TODO: Support more than WNAT cycles
 #returns: -1 on revert, 1 on success
 def submitArbitrage(path, amountIn, expectedOut) -> int :
@@ -14,48 +48,53 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
     # Get Transaction settings
     #
 
-    #Is Deflationary?
-    isDeflationary = False
-    for token in settings.deflationaryTokens:
-        if (token in path):
-            isDeflationary = True
+    #Deparse the path
+    paths, exchanges, deflationary = parsePath(path)
+    print(paths)
+    print(exchanges)
+    print(deflationary)
+
+    arbId = round(time.time() * 1000)
     
     #Available Balance? Assumes WNAT for now..
     executionAmount = amountIn
-    wnat_multiplier = 10 ** 18
     if not settings.debug:
-        available = ArbitrageContract.functions.getBalance(settings.tokens["WNAT"]).call()
-        available = available / wnat_multiplier
+        available = settings.ArbitrageContract.functions.getBalance(settings.tokens["WNAT"]).call()
+        available = available / settings.wnat_multiplier
         executionAmount = min(amountIn, int(available))
-
     
     tx_hash = "0xdebug"
     gas = 0
     status = "Debug"
+    revertReason = ""
 
     if not settings.debug:
+        print("Sending tx")
         acct = settings.RPC.eth.account.privateKeyToAccount(settings.config["privateKey"])
-        tx = ArbitrageContract.functions.executeArb(
-                        int(executionAmount * wnat_multiplier), 
-                        int((executionAmount + 1) * wnat_multiplier), #Require at least 1 token profit
-                        path,
-                        isDeflationary).build_transaction({
+        tx = settings.ArbitrageContract.functions.executeArb(
+                        int(executionAmount * settings.wnat_multiplier),
+                        paths,
+                        exchanges,
+                        deflationary,
+                        arbId).build_transaction({
                             'from': acct.address,
                             'nonce': settings.RPC.eth.getTransactionCount(acct.address),
-                            'gas': 3000000
+                            'gas': 3000000,
+                            'gasPrice': 100000000000
                         })
-        print("signing")
         signed = acct.signTransaction(tx)
-
-        print("sending")
         tx_hash = settings.RPC.eth.sendRawTransaction(signed.rawTransaction)
+        
 
         print("Waiting for receipt")
         tx_receipt = settings.RPC.eth.wait_for_transaction_receipt(tx_hash)
-        print(tx_receipt)
         gas = tx_receipt["effectiveGasPrice"] / 10**18 * tx_receipt["gasUsed"]
         status = "Success" if tx_receipt["status"] != 0 else "Revert"
         print(status, gas)
+
+        if (tx_receipt["status"] == 0):
+            revertReason = diagnoseRevert(tx_hash)
+        
 
     ret = 0
     if not settings.debug:
@@ -71,21 +110,63 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
         settings.pathHistory.pop(0)
         settings.statHistory.pop(0)
 
-    #TODO: How to get actual profit output from chain ??
-
     now = datetime.now()
     dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-    print("date and time =", dt_string)
-    logMessage = "Found arb opportunity at " + str(dt_string) + ":\n"\
+    logMessage = "Found arb opportunity at " + str(dt_string) + " for arb id: " + str(arbId) + "\n"\
                     + "Optimal: " + str(amountIn) + " Optimal Out: " + str(expectedOut) + "\n"\
                     + "Actual In: " + str(executionAmount) + "\n"\
                     + "Path: " + str(path) + "\n"\
-                    + "Includes Deflationary: " + str(isDeflationary) + "\n"\
-                    + "Gas Burnt: " + str(gas) + " Status: " + status + "\n\n"
+                    + "Includes Deflationary: " + str(deflationary) + "\n"\
+                    + "Gas Burnt: " + str(gas) + " Status: " + status + " " + revertReason + "\n\n"
     
     logFile = open("./log/log.txt", "a")
     logFile.write(logMessage)
     logFile.close()
 
+    #
+    #   MongoDB Logging
+    #
+    #
+    settings.tradesCollection.update_one(
+            {
+                "tradeId": arbId
+            },
+            { 
+                "$set": {
+                    "tradeId": arbId,
+                    "txHash": tx_hash,
+                    "path": path,
+                    "paths": paths,
+                    "exchanges": exchanges,
+                    "deflationary": deflationary,
+                    "optimalIn": float(amountIn),
+                    "expectedOut": float(expectedOut),
+                    "actualIn": float(executionAmount),
+                    "gasSpent": float(gas),
+                    "status": status,
+                    "revertReason": revertReason
+                }
+            },
+            upsert=True
+        )
+
     return ret
 
+def diagnoseRevert(tx_hash):
+    print("Getting revert reason...")
+    tx = settings.RPC.eth.getTransaction(tx_hash.hex())
+    tx_rebuilt = {}
+
+    for key in tx.keys():
+        if isinstance(tx[key], HexBytes):
+            tx_rebuilt[key] = tx[key].hex()
+        else:
+            tx_rebuilt[key] = tx[key]
+    tx_rebuilt.pop("gasPrice")
+
+    message = "Uknown"
+    try:
+        result = settings.RPC.eth.call(tx_rebuilt, tx_rebuilt["blockNumber"] - 1, {})
+    except Exception as e:
+        message = str(e)
+    return message
