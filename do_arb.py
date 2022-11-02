@@ -1,16 +1,14 @@
 #Actually interact with our arb contract
+from decimal import Decimal
 from hexbytes import HexBytes
 import settings
+import time
 from datetime import datetime
-
-
-ArbitrageContract = settings.RPC.eth.contract(address=settings.ArbitrageAddress, abi=settings.ArbitrageABI)
 
 #In: [("source", wnat), (exch1, token), (exch2, token), ... ,(exch, wnat), ("source", wnat)]
 #Out: Paths       : [[wnat, token1, token2], [token3, token4], [token5, wnat]]
 #     Exchanges   : [   exch1,                   exch2,           exch3]
 #     Deflationary: [    true                      false          false]
-#TODO: Implement
 def parsePath(path):
     paths = []
     exchanges = []
@@ -21,12 +19,6 @@ def parsePath(path):
     lastExch  = "source"
     currentPath = []
     for (exchange, token) in path:
-        #Time to end the path
-        # if token == settings.tokens["WNAT"] and exchange != "source":
-        #     print("Base")
-        #     currentPath.append(token)
-        #     exchanges.append(exchange)
-        #     break
         if exchange != lastExch and lastExch != "source":
             paths.append(currentPath)
             exchanges.append(lastExch)
@@ -58,38 +50,37 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
 
     #Deparse the path
     paths, exchanges, deflationary = parsePath(path)
-    print(path)
     print(paths)
     print(exchanges)
     print(deflationary)
+
+    arbId = round(time.time() * 1000)
     
     #Available Balance? Assumes WNAT for now..
     executionAmount = amountIn
-    wnat_multiplier = 10 ** 18
     if not settings.debug:
-        available = ArbitrageContract.functions.getBalance(settings.tokens["WNAT"]).call()
-        available = available / wnat_multiplier
+        available = settings.ArbitrageContract.functions.getBalance(settings.tokens["WNAT"]).call()
+        available = available / settings.wnat_multiplier
         executionAmount = min(amountIn, int(available))
-
-    requiredOutput = (executionAmount + 1) #Require at least 1 token profit
     
     tx_hash = "0xdebug"
     gas = 0
     status = "Debug"
+    revertReason = ""
 
-    #TODO: update this after ABI is updated to support multi-exchange
     if not settings.debug:
         print("Sending tx")
         acct = settings.RPC.eth.account.privateKeyToAccount(settings.config["privateKey"])
-        tx = ArbitrageContract.functions.executeArb(
-                        int(executionAmount * wnat_multiplier), 
-                        int(requiredOutput * wnat_multiplier), 
+        tx = settings.ArbitrageContract.functions.executeArb(
+                        int(executionAmount * settings.wnat_multiplier),
                         paths,
                         exchanges,
-                        deflationary).build_transaction({
+                        deflationary,
+                        arbId).build_transaction({
                             'from': acct.address,
                             'nonce': settings.RPC.eth.getTransactionCount(acct.address),
-                            'gas': 3000000
+                            'gas': 3000000,
+                            'gasPrice': 300000000000
                         })
         signed = acct.signTransaction(tx)
         tx_hash = settings.RPC.eth.sendRawTransaction(signed.rawTransaction)
@@ -98,11 +89,12 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
         print("Waiting for receipt")
         tx_receipt = settings.RPC.eth.wait_for_transaction_receipt(tx_hash)
         gas = tx_receipt["effectiveGasPrice"] / 10**18 * tx_receipt["gasUsed"]
-        status = "Success" if tx_receipt["status"] != 0 else "Revert:"
+        status = "Success" if tx_receipt["status"] != 0 else "Revert"
         print(status, gas)
 
         if (tx_receipt["status"] == 0):
-            status = status + " " + diagnoseRevert(tx_hash)
+            revertReason = diagnoseRevert(tx_hash)
+        
 
     ret = 0
     if not settings.debug:
@@ -120,16 +112,43 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
 
     now = datetime.now()
     dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-    logMessage = "Found arb opportunity at " + str(dt_string) + ":\n"\
+    logMessage = "Found arb opportunity at " + str(dt_string) + " for arb id: " + str(arbId) + "\n"\
                     + "Optimal: " + str(amountIn) + " Optimal Out: " + str(expectedOut) + "\n"\
-                    + "Actual In: " + str(executionAmount) + " Min Out: " + str(requiredOutput) + "\n"\
+                    + "Actual In: " + str(executionAmount) + "\n"\
                     + "Path: " + str(path) + "\n"\
-                    + "Includes Deflationary: " + str(False) + "\n"\
-                    + "Gas Burnt: " + str(gas) + " Status: " + status + "\n\n"
+                    + "Includes Deflationary: " + str(deflationary) + "\n"\
+                    + "Gas Burnt: " + str(gas) + " Status: " + status + " " + revertReason + "\n\n"
     
     logFile = open("./log/log.txt", "a")
     logFile.write(logMessage)
     logFile.close()
+
+    #
+    #   MongoDB Logging
+    #
+    #
+    settings.tradesCollection.update_one(
+            {
+                "tradeId": arbId
+            },
+            { 
+                "$set": {
+                    "tradeId": arbId,
+                    "txHash": tx_hash,
+                    "path": path,
+                    "paths": paths,
+                    "exchanges": exchanges,
+                    "deflationary": deflationary,
+                    "optimalIn": float(amountIn),
+                    "expectedOut": float(expectedOut),
+                    "actualIn": float(executionAmount),
+                    "gasSpent": float(gas),
+                    "status": status,
+                    "revertReason": revertReason
+                }
+            },
+            upsert=True
+        )
 
     return ret
 

@@ -1,7 +1,6 @@
 import json
-import readline
 from johnson import simple_cycles
-from rpc import batchGetReserves
+from rpc import batchGetReserves, handle_event
 import settings
 import itertools
 import time
@@ -40,7 +39,8 @@ OracleSwapContract = settings.RPC.eth.contract(address=OracleSwapFactoryAddress,
 PangolinFactoryAddress = "0xB66E62b25c42D55655a82F8ebf699f2266f329FB"
 PangolinFactoryContract = settings.RPC.eth.contract(address=PangolinFactoryAddress, abi=settings.OracleSwapFactoryABI)
 
-exchanges = ["blazeswap"]#["oracleswap", "pangolin"]
+# exchanges = ["blazeswap"]
+exchanges = ["oracleswap", "pangolin"]
 contracts = {
     "pangolin": PangolinFactoryContract,
     "oracleswap": OracleSwapContract,
@@ -60,7 +60,13 @@ def bootstrapTokenDatabase():
 # Update valid pools in the database
 # Initialize function - not meant to update reserve values
 def updatePairDatabase():
-    allPairs = itertools.product(settings.tokens.keys(), repeat=2)
+    #Get non-repeating pairs
+    k1 = list(settings.tokens.keys())
+    k2 = list(settings.tokens.keys())
+    allPairs = []
+    for i in range(len(k1)):
+        for j in range(i + 1, len(k2)):
+            allPairs.append((k1[i], k2[j]))
     
     for (token0, token1) in allPairs:
         if (token0 == token1):
@@ -95,8 +101,7 @@ def updatePairDatabase():
                     print(exchange, token0, r0 / 10**d0, token1, r1 / 10**d1, " liquidity too low")
                     continue
 
-
-                print(token0, token1, exchange)
+                print(f"Adding {token0}/{token1} pair")
                 s0 = token0 if settings.tokens[token0] == t0 else token1
                 s1 = token1 if s0 == token0 else token0
                 pairDB.add({   "token0": t0,
@@ -186,8 +191,6 @@ def initializeCycleList():
             else:
                 neighbors[(exchange, token)] = getNeighbors(token, pairDB)
 
-    print(neighbors)
-
     #Give zero element connectivity manually
     sourceAdjacencyList = []
     for (neighborExchange, neighborToken) in neighbors[("source", settings.tokens["WNAT"])]:
@@ -218,7 +221,7 @@ def initializeCycleList():
         for cycle in cycles:
             i+=1
             if (i % 10000 == 0):
-                print(cycle)
+                print(f"Processed {i} cycles...")
             cycle.append(0)
             settings.wnat_cycles.append(cycle)
             
@@ -256,10 +259,27 @@ def readCycleList():
 def tick() -> int:
     updatePairReserves()
 
-    return findpaths(settings.tokens["WNAT"], 'profitRatio')
+    return findpaths(settings.tokens["WNAT"], 'profit')
 
-import cProfile
-import pstats
+def initLoop():
+    consecutiveReverts = 0
+    event_filter = settings.ArbitrageContract.events.Result.createFilter(fromBlock='latest')
+
+    while True:
+        status = tick()
+
+        for event in event_filter.get_new_entries():
+            handle_event(event)
+
+        if status < 0:
+            consecutiveReverts += 1
+        else:
+            consecutiveReverts = 0
+        
+        #Naive negative loop safety
+        if consecutiveReverts > 5:
+            break
+
 # Initialization
 def main():
     bootstrap = False
@@ -269,7 +289,7 @@ def main():
         print("Bootstrapping token DB")
         bootstrapTokenDatabase() #Get token decimals
         print("Updating Pair DB")
-        # updatePairDatabase() #Check for any new pairs since last run
+        updatePairDatabase() #Check for any new pairs since last run
         print("Initializing the cycles...")
         initializeCycleList()
     else:
@@ -277,17 +297,9 @@ def main():
         readCycleList()
     initializePairCache()    
 
-    # consecutiveReverts = 0
-    # while True:
-    status = tick()
-    #     if status < 0:
-    #         consecutiveReverts += 1
-    #     else:
-    #         consecutiveReverts = 0
-        
-    #     #Naive negative loop safety
-    #     if consecutiveReverts > 5:
-    #         break
+    initLoop()
+
+
 
 
 main()

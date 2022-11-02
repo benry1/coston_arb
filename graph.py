@@ -72,7 +72,7 @@ def findpaths(from_token, sort_key) -> int:
         profitablePaths, profitablePathCounter = vetOpportunity(newCycle, profitablePaths, profitablePathCounter, sort_key)
 
     print("Done searching, found ", profitablePathCounter, " in ", time.time() - timer)
-    print(profitablePaths)
+    # print(profitablePaths)
 
     #Naively execute the best opportunity
     if len(profitablePaths) > 0:
@@ -94,7 +94,7 @@ def vetOpportunity(newCycle, profitablePathList, profitablePaths, sort_key):
     requiredProfit = Decimal(requiredProfit)
 
     if newCycle["profitRatio"] < requiredProfit:
-        print("Ignoring because {} < {}".format(newCycle['profitRatio'], requiredProfit))
+        # print("Ignoring because {} < {}".format(newCycle['profitRatio'], requiredProfit))
         return profitablePathList, profitablePaths
 
     #Has this same path failed recently?

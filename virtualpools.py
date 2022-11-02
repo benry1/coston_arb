@@ -30,13 +30,6 @@ def getOptimalAmount(Ea, Eb):
 def toInt(n):
     return Decimal(int(n))
 
-## TODO: To keep as decimals, or adjust all to BigInts?
-def adjustReserve(token, amount):
-    # res = Decimal(amount)*Decimal(pow(10, 18-token['decimal']))
-    # return Decimal(int(res))
-    return Decimal(amount)
-
-
 def getEaEb(tokenIn, path):
     pairs = getPairsInPath(path)
 
