@@ -250,7 +250,6 @@ def readCycleList():
         for key in data.keys():
             settings.node_index_values[key] = data[key]
     
-    print(settings.node_index_values)
     print("Read {} cycles in {} seconds".format(count, (time.time() - timer)))
 
 

@@ -80,7 +80,7 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
                             'from': acct.address,
                             'nonce': settings.RPC.eth.getTransactionCount(acct.address),
                             'gas': 3000000,
-                            'gasPrice': 300000000000
+                            'gasPrice': 100000000000
                         })
         signed = acct.signTransaction(tx)
         tx_hash = settings.RPC.eth.sendRawTransaction(signed.rawTransaction)
