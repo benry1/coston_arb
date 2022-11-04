@@ -215,7 +215,7 @@ def initializeCycleList():
     cycles_generator = simple_cycles(graph)
     #Limit to length 6 cycles. Question - How low is practical?
     #So far, no difference in opportunities down to <6.
-    cycles = filter(lambda cycle: len(cycle) < 10 and len(cycle) > 3, cycles_generator)
+    cycles = filter(lambda cycle: len(cycle) < 10 and len(cycle) > 2, cycles_generator)
     i = 0
     with open("./data/cycles.txt", "w") as file:
         for cycle in cycles:
@@ -263,18 +263,20 @@ def tick() -> int:
 def initLoop():
     consecutiveReverts = 0
     event_filter = settings.ArbitrageContract.events.Result.createFilter(fromBlock='latest')
+    block_filter = settings.RPC.eth.filter("latest")
 
     while True:
-        status = tick()
+        for block in block_filter.get_new_entries():
+            status = tick()
 
-        for event in event_filter.get_new_entries():
-            handle_event(event)
+            for event in event_filter.get_new_entries():
+                handle_event(event)
 
-        if status < 0:
-            consecutiveReverts += 1
-        else:
-            consecutiveReverts = 0
-        
+            if status < 0:
+                consecutiveReverts += 1
+            else:
+                consecutiveReverts = 0
+            
         #Naive negative loop safety
         if consecutiveReverts > 5:
             break
