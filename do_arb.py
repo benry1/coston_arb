@@ -68,6 +68,14 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
     status = "Debug"
     revertReason = ""
 
+    #Up the gas if this is a real opportunity
+    idealExecutionProfit = (expectedOut - amountIn) * (executionAmount / amountIn)
+    multiplier = 1
+    if idealExecutionProfit > 10:
+        multiplier = 3
+    if idealExecutionProfit > 100:
+        multiplier = 5
+
     if not settings.debug:
         print("Sending tx")
         acct = settings.RPC.eth.account.privateKeyToAccount(settings.config["privateKey"])
@@ -80,14 +88,14 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
                             'from': acct.address,
                             'nonce': settings.RPC.eth.getTransactionCount(acct.address),
                             'gas': 3000000,
-                            'gasPrice': 100000000000
+                            'gasPrice': 100000000000 * multiplier
                         })
         signed = acct.signTransaction(tx)
         tx_hash = settings.RPC.eth.sendRawTransaction(signed.rawTransaction)
         
 
         print("Waiting for receipt")
-        tx_receipt = settings.RPC.eth.wait_for_transaction_receipt(tx_hash)
+        tx_receipt = settings.RPC.eth.wait_for_transaction_receipt(tx_hash, timeout=10)
         gas = tx_receipt["effectiveGasPrice"] / 10**18 * tx_receipt["gasUsed"]
         status = "Success" if tx_receipt["status"] != 0 else "Revert"
         print(status, gas)
