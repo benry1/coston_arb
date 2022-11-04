@@ -33,7 +33,7 @@ def parsePath(path):
     for path in paths:
         hasDeflationary = False
         for token in settings.deflationaryTokens:
-            if token in path and path[-1] != token:
+            if token in path:
                 hasDeflationary = True
         deflationary.append(hasDeflationary)
 
