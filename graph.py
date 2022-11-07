@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from do_arb import submitArbitrage
 from virtualpools import getAmountOut, getEaEb, getOptimalAmount
-from settings import wnat_cycles, node_index_values, deflationaryTokens, deflationLevel, pathHistory, statHistory
+from settings import source_cycles, node_index_values, deflationaryTokens, deflationLevel, pathHistory, statHistory
  
 def getNeighbors(asset: str, pairDB):
     fullList = pairDB.getByQuery({"token0": asset}) + pairDB.getByQuery({"token1": asset})
@@ -22,7 +22,7 @@ def getNeighbors(asset: str, pairDB):
 #Compile virtual pool size for all known cycles
 #Optimizations available here, in "getEaEb"... currently ~0.25s/10000 pools
 #Returns: -1 on revert, 0 on no paths found, 1 on success
-def findpaths(from_token, sort_key) -> int:
+def findpaths(from_symbol, from_token, sort_key) -> int:
 
     profitablePaths = []
     profitablePathCounter = 0
@@ -30,7 +30,8 @@ def findpaths(from_token, sort_key) -> int:
     counter = 0
     timer = time.time()
     stepTimer = time.time() #oh no, what are you doing step-timer?
-    for cycle in wnat_cycles:
+    for cycle in source_cycles[from_symbol]:
+        # print(from_symbol, cycle, node_index_values[from_symbol])
         #Logging
         counter = counter + 1
         if counter % 100000 == 0:
@@ -39,10 +40,10 @@ def findpaths(from_token, sort_key) -> int:
         
 
         #Reconstruct path
-        #[("source", wnat), (exchange, token) .... (exchange, wnat)]
+        #[("source", source), (exchange, token) .... (exchange, source)]
         reconstructed_cycle = []
         for vertex in cycle:
-            reconstructed_cycle.append(node_index_values[str(vertex)])
+            reconstructed_cycle.append(node_index_values[from_symbol][str(vertex)])
         
         #Get EaEb for reconstructed cycle
         Ea, Eb = getEaEb(from_token, reconstructed_cycle)
@@ -71,13 +72,13 @@ def findpaths(from_token, sort_key) -> int:
         #Now .... is it REALLY worth it?
         profitablePaths, profitablePathCounter = vetOpportunity(newCycle, profitablePaths, profitablePathCounter, sort_key)
 
-    print("Done searching, found ", profitablePathCounter, " in ", time.time() - timer)
+    print(f"Done searching {from_symbol}, found {profitablePathCounter} in {time.time() - timer}")
     # print(profitablePaths)
 
     #Naively execute the best opportunity
     if len(profitablePaths) > 0:
         execute = profitablePaths[0]
-        return submitArbitrage(execute["path"], execute["optimalAmount"], execute["outputAmount"])
+        return submitArbitrage(from_symbol, execute["path"], from_token, execute["optimalAmount"], execute["outputAmount"])
     else:
         return 0
 

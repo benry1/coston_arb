@@ -30,21 +30,10 @@ tokenDB = db.getDb("./data/tokens.json")
 # }
 pairDB  = db.getDb("./data/pairs.json")
 
-BlazeSwapRouterAddress = "0xEbf80b08f69F359A1713F1C650eEC2F95947Cfe5" # Coston
-BlazeSwapContract = settings.RPC.eth.contract(address=BlazeSwapRouterAddress, abi=settings.BlazeSwapRouterABI)
-
-OracleSwapFactoryAddress = "0xDcA8EfcDe7F6Cb36904ea204bb7FCC724889b55d"
-OracleSwapContract = settings.RPC.eth.contract(address=OracleSwapFactoryAddress, abi=settings.OracleSwapFactoryABI)
-
-PangolinFactoryAddress = "0xB66E62b25c42D55655a82F8ebf699f2266f329FB"
-PangolinFactoryContract = settings.RPC.eth.contract(address=PangolinFactoryAddress, abi=settings.OracleSwapFactoryABI)
-
-# exchanges = ["blazeswap"]
-exchanges = ["oracleswap", "pangolin"]
 contracts = {
-    "pangolin": PangolinFactoryContract,
-    "oracleswap": OracleSwapContract,
-    "blazeswap": BlazeSwapContract
+    "pangolin": settings.PangolinFactoryContract,
+    "oracleswap": settings.OracleSwapContract,
+    "blazeswap": settings.BlazeSwapContract
 }
 
 # Save token info if not exist
@@ -73,7 +62,7 @@ def updatePairDatabase():
             continue
         
         ###create new pair for blaze/pangolin/neo/canaryx/flrfinance/etc
-        for exchange in exchanges:
+        for exchange in settings.exchanges:
             #Check if DB has this pair
             try1 = pairDB.getByQuery({"symbol0": token0, "symbol1": token1, "exchange": exchange})
             try2 = pairDB.getByQuery({"symbol0": token1, "symbol1": token0, "exchange": exchange})
@@ -84,7 +73,7 @@ def updatePairDatabase():
             try:
                 pairAddress = "0x0"
                 if exchange == "blazeswap":
-                    pairAddress = BlazeSwapContract.functions.pairFor(settings.tokens[token0], settings.tokens[token1]).call()
+                    pairAddress = contracts[exchange].functions.pairFor(settings.tokens[token0], settings.tokens[token1]).call()
                 else:
                     pairAddress = contracts[exchange].functions.getPair(settings.tokens[token0], settings.tokens[token1]).call()
                 pairContract = settings.RPC.eth.contract(address=pairAddress, abi=settings.BlazeSwapPairABI)
@@ -126,7 +115,7 @@ def initializePairCache():
 
     
     for (token0, token1) in allPairs:
-        for exchange in exchanges:
+        for exchange in settings.exchanges:
             if (token0 == token1):
                 continue
             #Sort alphabetically
@@ -145,7 +134,7 @@ def updatePairReserves():
     allPairObjects = list(
                         filter(
                             lambda pair: 
-                                pair["exchange"] in exchanges and 
+                                pair["exchange"] in settings.exchanges and 
                                 pair["symbol0"] in settings.tokens.keys() and
                                 pair["symbol1"] in settings.tokens.keys(), allPairObjects))
     start = time.time()
@@ -160,7 +149,7 @@ def updatePairReserves():
                 {"reserve0": pair["reserve0"] / pow(10, d0), "reserve1": pair["reserve1"]/pow(10, d1) }
             )
 
-        if pair["exchange"] not in exchanges:
+        if pair["exchange"] not in settings.exchanges:
             continue
         
         #Update pairCache
@@ -170,22 +159,23 @@ def updatePairReserves():
     print("Update took ", time.time() - start)
 
 
-#Use modified Johnson algorithm to quickly find all cycles through WNAT
-def initializeCycleList():
+#Use modified Johnson algorithm to quickly find all cycles through the source token
+def initializeCycleList(source):
     #Build adjacency list as Johnson's algorithm needs it
     #Also build an index of node's token value to convert back later
     neighbors = {}
     nodeValues = {}
     graph = {} # Final adjacency list with number values
-    nodeValues[("source", settings.tokens["WNAT"])] = 0 #Hard code the start node as a non-exchange-affiliated WNAT
-    settings.node_index_values["0"] = ("source", settings.tokens["WNAT"])
+    nodeValues[("source", settings.tokens[source])] = 0 #Hard code the start node as a non-exchange-affiliated SOURCE
+    settings.node_index_values[source] = {}
+    settings.node_index_values[source]["0"] = ("source", settings.tokens[source])
     index = 0
     for (token) in settings.tokens.values():
-        for exchange in exchanges:
+        for exchange in settings.exchanges:
             index += 1
             nodeValues[(exchange, token)] = index
-            settings.node_index_values[str(index)] = (exchange, token)
-            if token == settings.tokens["WNAT"]:
+            settings.node_index_values[source][str(index)] = (exchange, token)
+            if token == settings.tokens[source]:
                 neighbors[(exchange, token)] = [("source", token)]
                 neighbors[("source", token)] = getNeighbors(token, pairDB)
             else:
@@ -193,16 +183,16 @@ def initializeCycleList():
 
     #Give zero element connectivity manually
     sourceAdjacencyList = []
-    for (neighborExchange, neighborToken) in neighbors[("source", settings.tokens["WNAT"])]:
-        if (neighborToken in settings.tokens.values() and neighborExchange in exchanges):
+    for (neighborExchange, neighborToken) in neighbors[("source", settings.tokens[source])]:
+        if (neighborToken in settings.tokens.values() and neighborExchange in settings.exchanges):
                 sourceAdjacencyList.append(nodeValues[(neighborExchange, neighborToken)])
     graph[0] = sourceAdjacencyList
     #Now handle rest of elements
     for (idx, token) in enumerate(settings.tokens.values()):
-        for exchange in exchanges:
+        for exchange in settings.exchanges:
             adjacencyList = []
             for (neighborExchange, neighborToken) in neighbors[(exchange, token)]:
-                if (neighborToken in settings.tokens.values() and (neighborExchange in exchanges or neighborExchange == "source")):
+                if (neighborToken in settings.tokens.values() and (neighborExchange in settings.exchanges or neighborExchange == "source")):
                     adjacencyList.append(nodeValues[(neighborExchange, neighborToken)])
             adjacencyList.sort()
             graph[nodeValues[(exchange, token)]] = adjacencyList
@@ -210,72 +200,83 @@ def initializeCycleList():
     # print(graph)
     # print(nodeValues)    
     #With initialized graph,
-    #Find all cycles through WNAT.
+    #Find all cycles through source.
     timer = time.time()
     cycles_generator = simple_cycles(graph)
     #Limit to length 6 cycles. Question - How low is practical?
     #So far, no difference in opportunities down to <6.
     cycles = filter(lambda cycle: len(cycle) < 10 and len(cycle) > 2, cycles_generator)
     i = 0
-    with open("./data/cycles.txt", "w") as file:
+    with open(f"./data/cycles_{source}.txt", "w") as file:
+        settings.source_cycles[source] = []
         for cycle in cycles:
             i+=1
             if (i % 10000 == 0):
                 print(f"Processed {i} cycles...")
             cycle.append(0)
-            settings.wnat_cycles.append(cycle)
+            settings.source_cycles[source].append(cycle)
             
             
             line_str = [str(n) for n in cycle]
             file.write(" ".join(line_str) + "\n")
     
-    with open("./data/index_values.json", "w") as file:
+    with open(f"./data/index_values.json", "w") as file:
         json.dump(settings.node_index_values, file)
-    print("Found {} useful cycles in {}".format(len(settings.wnat_cycles), (time.time() - timer)))
+    print("Found {} useful cycles in {}".format(len(settings.source_cycles[source]), (time.time() - timer)))
 
-def readCycleList():
+def readCycleList(source):
     timer = time.time()
-    with open("./data/cycles.txt", "r") as file:
+    with open(f"./data/cycles_{source}.txt", "r") as file:
+        settings.source_cycles[source] = []
         line = file.readline()
         count = 0
         while line:
             split = line.split(" ")
             cycle = (int(i) for i in split)
-            settings.wnat_cycles.append(list(cycle))
+            settings.source_cycles[source].append(list(cycle))
             count += 1
             line = file.readline()
     
-    with open("./data/index_values.json", "r") as file:
+    with open(f"./data/index_values.json", "r") as file:
         data = json.load(file)
-        for key in data.keys():
-            settings.node_index_values[key] = data[key]
+        for source_key in data.keys():
+            settings.node_index_values[source_key] = {}
+            for token_key in data[source_key].keys():
+                settings.node_index_values[source_key][token_key] = data[source_key][token_key]
     
     print("Read {} cycles in {} seconds".format(count, (time.time() - timer)))
 
-
-# Main Loop
-#Returns: -1 on revert, 0 on no opportunities, 1 on success
-def tick() -> int:
-    updatePairReserves()
-
-    return findpaths(settings.tokens["WNAT"], 'profit')
+    
 
 def initLoop():
     consecutiveReverts = 0
     event_filter = settings.ArbitrageContract.events.Result.createFilter(fromBlock='latest')
     block_filter = settings.RPC.eth.filter("latest")
 
+    print("Waiting for blocks to begin!")
+
     while True:
         for block in block_filter.get_new_entries():
-            status = tick()
+            now = time.time()
+            
+            updatePairReserves()
+            statuses = []
+            for source in settings.source_tokens:
+                statuses.append(findpaths(source, settings.tokens[source], 'profit'))
+
 
             for event in event_filter.get_new_entries():
                 handle_event(event)
 
-            if status < 0:
+            #Should never revert 5 ticks in a row
+            #There should at least be a no_paths_found response first!
+            if -1 in statuses:
                 consecutiveReverts += 1
             else:
                 consecutiveReverts = 0
+
+            blocktime = settings.RPC.eth.get_block(block.hex())["timestamp"]
+            print("Delay was {}\n".format(now - blocktime))
             
         #Naive negative loop safety
         if consecutiveReverts > 5:
@@ -283,20 +284,25 @@ def initLoop():
 
 # Initialization
 def main():
-    bootstrap = False
+    bootstrap = True
     print("Hello, Arbitrageur!")
     #Bootstrap with latest tokens and pools
     if bootstrap:
         print("Bootstrapping token DB")
         bootstrapTokenDatabase() #Get token decimals
         print("Updating Pair DB")
-        updatePairDatabase() #Check for any new pairs since last run
+        # updatePairDatabase() #Check for any new pairs since last run
         print("Initializing the cycles...")
-        initializeCycleList()
+        for source in settings.source_tokens:
+            initializeCycleList(source)
     else:
-        print("Reading cycle list...")
-        readCycleList()
-    initializePairCache()    
+        print("Reading cycle lists...")
+        for source in settings.source_tokens:
+            readCycleList(source)
+    initializePairCache()  
+
+    # print(settings.source_cycles.keys(), len(settings.source_cycles["WNAT"]))  
+    # print(settings.node_index_values)
 
     initLoop()
 

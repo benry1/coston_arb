@@ -5,17 +5,17 @@ import settings
 import time
 from datetime import datetime
 
-#In: [("source", wnat), (exch1, token), (exch2, token), ... ,(exch, wnat), ("source", wnat)]
-#Out: Paths       : [[wnat, token1, token2], [token3, token4], [token5, wnat]]
+#In: [("source", source), (exch1, token), (exch2, token), ... ,(exch, source), ("source", source)]
+#Out: Paths       : [[source, token1, token2], [token3, token4], [token5, source]]
 #     Exchanges   : [   exch1,                   exch2,           exch3]
 #     Deflationary: [    true                      false          false]
-def parsePath(path):
+def parsePath(path, source):
     paths = []
     exchanges = []
     deflationary = []
 
     #Step is (exchange, token)
-    lastToken = settings.tokens["WNAT"]
+    lastToken = settings.tokens[source]
     lastExch  = "source"
     currentPath = []
     for (exchange, token) in path:
@@ -40,9 +40,8 @@ def parsePath(path):
         
     return paths, exchanges, deflationary
 
-#TODO: Support more than WNAT cycles
 #returns: -1 on revert, 1 on success
-def submitArbitrage(path, amountIn, expectedOut) -> int :
+def submitArbitrage(source_symbol, path, source, amountIn, expectedOut) -> int :
 
     #
     # Get Transaction settings
@@ -56,11 +55,11 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
 
     arbId = round(time.time() * 1000)
     
-    #Available Balance? Assumes WNAT for now..
+    #Available Balance? Assumes 18 decimals for now..
     executionAmount = amountIn
     if not settings.debug:
-        available = settings.ArbitrageContract.functions.getBalance(settings.tokens["WNAT"]).call()
-        available = available / settings.wnat_multiplier
+        available = settings.ArbitrageContract.functions.getBalance(settings.tokens[source]).call()
+        available = available / settings.eighteen_decimals
         executionAmount = min(amountIn, int(available))
     
     tx_hash = "0xdebug"
@@ -80,7 +79,7 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
         print("Sending tx")
         acct = settings.RPC.eth.account.privateKeyToAccount(settings.config["privateKey"])
         tx = settings.ArbitrageContract.functions.executeArb(
-                        int(executionAmount * settings.wnat_multiplier),
+                        int(executionAmount * settings.eighteen_decimals),
                         paths,
                         exchanges,
                         deflationary,
@@ -120,7 +119,7 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
 
     now = datetime.now()
     dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-    logMessage = "Found arb opportunity at " + str(dt_string) + " for arb id: " + str(arbId) + "\n"\
+    logMessage = "Found " + source_symbol + " arb opportunity at " + str(dt_string) + " for arb id: " + str(arbId) + "\n"\
                     + "Optimal: " + str(amountIn) + " Optimal Out: " + str(expectedOut) + "\n"\
                     + "Actual In: " + str(executionAmount) + "\n"\
                     + "Path: " + str(path) + "\n"\
@@ -143,6 +142,7 @@ def submitArbitrage(path, amountIn, expectedOut) -> int :
                 "$set": {
                     "tradeId": arbId,
                     "txHash": tx_hash,
+                    "source": source_symbol,
                     "path": path,
                     "paths": paths,
                     "exchanges": exchanges,
