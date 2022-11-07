@@ -10,9 +10,9 @@ def handle_event(event):
     event_json = json.loads(settings.RPC.toJSON(event))["args"]
     print("EVENT:", event_json)
     #Upsert the trade with AmountOut and Profit information
-    event_json["endBalance"] = event_json["endBalance"] / settings.wnat_multiplier
-    event_json["startBalance"]  = event_json["startBalance"] / settings.wnat_multiplier
-    event_json["profit"]  = event_json["profit"] / settings.wnat_multiplier
+    event_json["endBalance"] = event_json["endBalance"] / settings.eighteen_decimals
+    event_json["startBalance"]  = event_json["startBalance"] / settings.eighteen_decimals
+    event_json["profit"]  = event_json["profit"] / settings.eighteen_decimals
     settings.tradesCollection.update_one(
             {
                 "tradeId": event_json["id"]

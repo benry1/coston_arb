@@ -33,8 +33,10 @@ ArbitrageContract = RPC.eth.contract(address=ArbitrageAddress, abi=ArbitrageABI)
 #
 #
 
+source_tokens = ["EXFI", "SFIN", "WNAT"]
+
 #Just don't want to do file access every time
-wnat_multiplier = 10**18
+eighteen_decimals = 10**18
 
 # tokens = {
 #     "WNAT":   "0x1659941d425224408c5679eeef606666c7991a8A",
@@ -117,12 +119,28 @@ deflationLevel = {
 }
 
 
+####################
+# Exchanges Config #
+####################
+
+BlazeSwapRouterAddress = "0xEbf80b08f69F359A1713F1C650eEC2F95947Cfe5" # Coston
+BlazeSwapContract = RPC.eth.contract(address=BlazeSwapRouterAddress, abi=BlazeSwapRouterABI)
+
+OracleSwapFactoryAddress = "0xDcA8EfcDe7F6Cb36904ea204bb7FCC724889b55d"
+OracleSwapContract = RPC.eth.contract(address=OracleSwapFactoryAddress, abi=OracleSwapFactoryABI)
+
+PangolinFactoryAddress = "0xB66E62b25c42D55655a82F8ebf699f2266f329FB"
+PangolinFactoryContract = RPC.eth.contract(address=PangolinFactoryAddress, abi=OracleSwapFactoryABI)
+
+# exchanges = ["blazeswap"]
+exchanges = ["oracleswap", "pangolin"]
+
 #
 #       Graph Helpers Initialized once
 #
 #
 pairCache = {}
-wnat_cycles = []
+source_cycles = {}
 node_index_values = {}
 
 
