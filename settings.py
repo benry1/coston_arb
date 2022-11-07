@@ -10,6 +10,7 @@ config = dotenv_values(".env")
 
 debug = config["debug"] == "True"
 
+
 #
 #
 #       Contract and RPC
@@ -33,7 +34,7 @@ ArbitrageContract = RPC.eth.contract(address=ArbitrageAddress, abi=ArbitrageABI)
 #
 #
 
-source_tokens = ["EXFI", "SFIN", "WNAT"]
+source_tokens = ["WNAT"]
 
 #Just don't want to do file access every time
 eighteen_decimals = 10**18
