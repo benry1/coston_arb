@@ -5,7 +5,8 @@ from decimal import Decimal
 
 from do_arb import submitArbitrage
 from virtualpools import getAmountOut, getEaEb, getOptimalAmount
-from settings import source_cycles, node_index_values, deflationaryTokens, deflationLevel, pathHistory, statHistory
+from settings import source_cycles, node_index_values, deflationLevel, pathHistory, statHistory
+import settings
  
 def getNeighbors(asset: str, pairDB):
     fullList = pairDB.getByQuery({"token0": asset}) + pairDB.getByQuery({"token1": asset})
@@ -88,8 +89,9 @@ def vetOpportunity(newCycle, profitablePathList, profitablePaths, sort_key):
     path = newCycle["path"]
     requiredProfit = 1.001
     for (exchange, token) in path:
-        if (token in deflationaryTokens):
+        if (token in settings.deflationaryTokens):
             requiredProfit *= deflationLevel[token]
+            
             
 
     requiredProfit = Decimal(requiredProfit)
@@ -97,6 +99,7 @@ def vetOpportunity(newCycle, profitablePathList, profitablePaths, sort_key):
     if newCycle["profitRatio"] < requiredProfit:
         # print("Ignoring because {} < {}".format(newCycle['profitRatio'], requiredProfit))
         return profitablePathList, profitablePaths
+        
 
     #Has this same path failed recently?
     for i in reversed(range(len(pathHistory))):

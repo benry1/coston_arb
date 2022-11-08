@@ -285,6 +285,7 @@ def initLoop():
 # Initialization
 def main():
     bootstrap = False
+    settings.init_settings()
     print("Hello, Arbitrageur!")
     #Bootstrap with latest tokens and pools
     if bootstrap:
