@@ -284,14 +284,14 @@ def initLoop():
 
 # Initialization
 def main():
-    bootstrap = True
+    bootstrap = False
     print("Hello, Arbitrageur!")
     #Bootstrap with latest tokens and pools
     if bootstrap:
         print("Bootstrapping token DB")
         bootstrapTokenDatabase() #Get token decimals
         print("Updating Pair DB")
-        # updatePairDatabase() #Check for any new pairs since last run
+        updatePairDatabase() #Check for any new pairs since last run
         print("Initializing the cycles...")
         for source in settings.source_tokens:
             initializeCycleList(source)

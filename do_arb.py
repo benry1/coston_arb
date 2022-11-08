@@ -9,13 +9,13 @@ from datetime import datetime
 #Out: Paths       : [[source, token1, token2], [token3, token4], [token5, source]]
 #     Exchanges   : [   exch1,                   exch2,           exch3]
 #     Deflationary: [    true                      false          false]
-def parsePath(path, source):
+def parsePath(path, source_symbol):
     paths = []
     exchanges = []
     deflationary = []
 
     #Step is (exchange, token)
-    lastToken = settings.tokens[source]
+    lastToken = settings.tokens[source_symbol]
     lastExch  = "source"
     currentPath = []
     for (exchange, token) in path:
@@ -48,7 +48,7 @@ def submitArbitrage(source_symbol, path, source, amountIn, expectedOut) -> int :
     #
 
     #Deparse the path
-    paths, exchanges, deflationary = parsePath(path)
+    paths, exchanges, deflationary = parsePath(path, source_symbol)
     print(paths)
     print(exchanges)
     print(deflationary)
@@ -58,7 +58,7 @@ def submitArbitrage(source_symbol, path, source, amountIn, expectedOut) -> int :
     #Available Balance? Assumes 18 decimals for now..
     executionAmount = amountIn
     if not settings.debug:
-        available = settings.ArbitrageContract.functions.getBalance(settings.tokens[source]).call()
+        available = settings.ArbitrageContract.functions.getBalance(settings.tokens[source_symbol]).call()
         available = available / settings.eighteen_decimals
         executionAmount = min(amountIn, int(available))
     
