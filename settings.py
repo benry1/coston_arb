@@ -35,13 +35,14 @@ ArbitrageContract = RPC.eth.contract(address=ArbitrageAddress, abi=ArbitrageABI)
 #
 #
 
-source_tokens = ["WNAT"]
+
 
 #Just don't want to do file access every time
 eighteen_decimals = 10**18
 
 tokens = {}
 minReserve = {}
+source_tokens = []
 deflationaryTokens = []
 
 #What is the minimum profit margin
@@ -57,7 +58,7 @@ deflationLevel = {
 # Exchanges Config #
 ####################
 
-BlazeSwapRouterAddress = "0xb8F35B03F32569B5672EB9F84FA76F4d0210e3B3" # Coston
+BlazeSwapRouterAddress = "0xeFDff1AE7841786B21b72482a5a8e2cBFA7aEf48" # Coston
 BlazeSwapContract = RPC.eth.contract(address=BlazeSwapRouterAddress, abi=BlazeSwapRouterABI)
 
 OracleSwapFactoryAddress = "0xDcA8EfcDe7F6Cb36904ea204bb7FCC724889b55d"
@@ -103,10 +104,11 @@ tradesCollection = arbDB["trades"]
 
 #Build the environment based on which network we're on
 def init_settings():
-    global env, tokens, minReserve, exchanges, deflationaryTokens
+    global env, tokens, minReserve, exchanges, deflationaryTokens, source_tokens
+    print(env)
     if env == "coston":
         tokens = {
-            "WNAT":   "0x1659941d425224408c5679eeef606666c7991a8A",
+            "WCFLR":   "0x1659941d425224408c5679eeef606666c7991a8A",
             "testBTC": "0x2A9EAE71Bf8d7392b2c9409a8F036fcf6F88fc44",
             "testXRP": "0x73cADB6ce663983dA2507e160543d84D8bA29EfA",
             "testADA": "0x8048C36831d8F7e40365Cf11cff6Db66293ec9e9",
@@ -131,9 +133,10 @@ def init_settings():
         }
         deflationaryTokens = ["0xF3D185162E55463264B0d63DD4497093B00F57d1"] # Coston
         exchanges = ["blazeswap"]
+        source_tokens = ["WCFLR"]
     elif env == "songbird":
         tokens = {
-            "WNAT": "0x02f0826ef6aD107Cfc861152B32B52fD11BaB9ED",
+            "WSGB": "0x02f0826ef6aD107Cfc861152B32B52fD11BaB9ED",
             "SFORT": "0x9E2E6c16803878C18E54Ed74F05AeafCCe464626",
             "DOOD": "0x612c20D14493dC6a389603aEF56006AD6a09A76f",
             "sDOOD": "0x697bb3B5E1eCf4fEbE6016321b0648d3d6C270B6",
@@ -176,4 +179,5 @@ def init_settings():
         }
         deflationaryTokens = ["0x8d32E20d119d936998575B4AAff66B9999011D27", '0xf810576A68C3731875BDe07404BE815b16fC0B4e'] # Songbird
         exchanges = ["oracleswap", "pangolin"]
+        source_tokens = ["WSGB"]
 

@@ -1,12 +1,17 @@
-import settings
+"""
+Handles all RPC batch calling and parsing
+"""
 import json
+import threading
 
 from web3._utils.request import make_post_request
 from web3 import HTTPProvider
 from eth_abi import decode_abi
+import settings
 
 
 def handle_event(event):
+    """Handle events when emitted from arb contract"""
     event_json = json.loads(settings.RPC.toJSON(event))["args"]
     print("EVENT:", event_json)
     #Upsert the trade with AmountOut and Profit information
@@ -27,7 +32,8 @@ def handle_event(event):
             upsert=True
         )
 
-def generateJsonRpc(method, params, request_id=1):
+def generate_json_rpc(method, params, request_id=1):
+    """RPC request boilerplate"""
     return {
         'jsonrpc': '2.0',
         'method': method,
@@ -35,34 +41,38 @@ def generateJsonRpc(method, params, request_id=1):
         'id': request_id,
     }
 
-def generateGetReservesBatch(pairs, blockNumber='latest'):
-    c = settings.RPC.eth.contract(abi=settings.BlazeSwapPairABI) 
+def generate_get_reserves_batch(pairs, block_number='latest'):
+    """Generate a RPC boilerplate for each getReserves call"""
+    contract = settings.RPC.eth.contract(abi=settings.BlazeSwapPairABI)
     for pair in pairs:
-        yield generateJsonRpc(
+        yield generate_json_rpc(
                 method='eth_call',
                 params=[{
                     'to': pair["pairAddress"],
-                    'data': c.encodeABI(fn_name='getReserves', args=[]),
+                    'data': contract.encodeABI(fn_name='getReserves', args=[]),
                     },
-                    hex(blockNumber) if blockNumber != 'latest' else 'latest',
+                    hex(block_number) if block_number != 'latest' else 'latest',
                     ]
                 )
 
 def rpc_response_batch_to_results(response):
+    """Decode batch response"""
     for response_item in response:
         yield rpc_response_to_result(response_item)
 
 
 def rpc_response_to_result(response):
+    """Get individual result, or throw error"""
     result = response.get('result')
     if result is None:
-        error_message = 'result is None in response {}.'.format(response)
+        error_message = f"result is None in response {response}."
         raise ValueError(error_message)
     return result
 
 class BatchHTTPProvider(HTTPProvider):
-
+    """Serve batch HTTP requests to provider"""
     def make_batch_request(self, text):
+        """Send the already-built batch request"""
         self.logger.debug("Making request HTTP. URI: %s, Request: %s",
                           self.endpoint_uri, text)
         request_data = text.encode('utf-8')
@@ -80,22 +90,21 @@ class BatchHTTPProvider(HTTPProvider):
 #Get up to 200 reserves in one call
 current_env = settings.config["env"]
 batch_provider = BatchHTTPProvider(settings.config[f"rpcUrl_{current_env}"])
-def get_reserves(pairs, blockNumber='latest'):
-    r = list(generateGetReservesBatch(pairs, blockNumber))
-    resp = batch_provider.make_batch_request(json.dumps(r))
+def get_reserves(pairs, block_number='latest'):
+    """Get reserves for all pairs in batch"""
+    r_requests = list(generate_get_reserves_batch(pairs, block_number))
+    resp = batch_provider.make_batch_request(json.dumps(r_requests))
     results = list(rpc_response_batch_to_results(resp))
-    for i in range(len(results)):
-        res = decode_abi(['uint256', 'uint256', 'uint256'], bytes.fromhex(results[i][2:]))
+    for i, result in enumerate(results):
+        res = decode_abi(['uint256', 'uint256', 'uint256'], bytes.fromhex(result[2:]))
         pairs[i]['reserve0'] = res[0]
         pairs[i]['reserve1'] = res[1]
     return pairs
 
-
-import threading
-
 class MyThread(threading.Thread):
+    """Thread class for making several simultaneous batch calls"""
     def __init__(self, func, args):
-        super(MyThread, self).__init__()
+        super().__init__
         self.func = func
         self.args = args
 
@@ -103,30 +112,32 @@ class MyThread(threading.Thread):
         self.result = self.func(*self.args)
 
     def get_result(self):
+        """Get the result of the request sent on this thread."""
         try:
             return self.result
-        except Exception as e:
-            print('thread exception:', e)
+        except Exception as exception:
+            print('thread exception:', exception)
             return None
 
 #Batched reserves
-def batchGetReserves(pairs):
+def batch_get_reserves(pairs):
+    """Build, Send, Parse a batch of get_reserves calls"""
     if len(pairs) < 200:
         return get_reserves(pairs)
-    else:
-        s = 0
-        threads = []
-        while s < len(pairs):
-            e = s + 200
-            if e > len(pairs):
-                e = len(pairs)
-            t = MyThread(func=get_reserves, args=(pairs[s:e],))
-            t.start()
-            threads.append(t)
-            s = e
-        new_pairs = []
-        for t in threads:
-            t.join()
-            ret = t.get_result()
-            new_pairs.extend(ret)
-        return new_pairs
+
+    start = 0
+    threads = []
+    while start < len(pairs):
+        end = start + 200
+        if end > len(pairs):
+            end = len(pairs)
+        thread = MyThread(func=get_reserves, args=(pairs[start:end],))
+        thread.start()
+        threads.append(thread)
+        start = end
+    new_pairs = []
+    for thread in threads:
+        thread.join()
+        ret = thread.get_result()
+        new_pairs.extend(ret)
+    return new_pairs

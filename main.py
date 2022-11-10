@@ -1,14 +1,20 @@
+"""
+This is the main module of the arbitrage bot.
+main() method at the bottom will:
+
+1. Get all useful pairs for the exchanges used.
+2. Find all valid cycles in the system, based on your settings
+3. Begin a loop where each new block, check for arbitrage cycles.
+"""
 import json
-from johnson import simple_cycles
-from rpc import batchGetReserves, handle_event
-import settings
 import itertools
 import time
-
-from web3 import Web3
 from pysondb import db
 
-from graph import findpaths, getNeighbors
+import settings
+from johnson import simple_cycles
+from rpc import batch_get_reserves, handle_event
+from graph import findpaths, get_named_pairs, get_neighbor_tokens, get_johnson_graph
 
 
 # {
@@ -37,30 +43,71 @@ contracts = {
 }
 
 # Save token info if not exist
-def bootstrapTokenDatabase():
-    for key in settings.tokens.keys():
+def bootstrap_token_db():
+    """Get and save decimals for each token used"""
+    for key, value in settings.tokens.items():
         if len(tokenDB.getByQuery({"symbol": key})) == 0:
-            print(key, settings.tokens[key])
-            tokenAddress = settings.tokens[key]
-            tokenContract = settings.RPC.eth.contract(address=tokenAddress, abi=settings.ERC20ABI)
-            decimals = tokenContract.functions.decimals().call()
-            tokenDB.add({"symbol": key, "address": tokenAddress, "decimals": decimals})
+            print(key, value)
+            token_contract = settings.RPC.eth.contract(address=value, abi=settings.ERC20ABI)
+            decimals = token_contract.functions.decimals().call()
+            tokenDB.add({"symbol": key, "address": value, "decimals": decimals})
 
-# Update valid pools in the database
-# Initialize function - not meant to update reserve values
-def updatePairDatabase():
+def check_and_save_pair(exchange, token0, token1):
+    pair_address = "0x0"
+    if exchange == "blazeswap":
+        pair_address = contracts[exchange].functions.pairFor(
+                                                    settings.tokens[token0],
+                                                    settings.tokens[token1]
+                                                ).call()
+    else:
+        pair_address = contracts[exchange].functions.getPair(
+                                                    settings.tokens[token0],
+                                                    settings.tokens[token1]
+                                                ).call()
+    pair_contract = settings.RPC.eth.contract(address=pair_address,
+                                                abi=settings.BlazeSwapPairABI)
+    #Will fail here if invalid
+    [r_0, r_1, _] = pair_contract.functions.getReserves().call()
+
+    t_0 = pair_contract.functions.token0().call()
+    t_1 = pair_contract.functions.token1().call()
+    #Determine if there is enough reserve to be worth it
+    token0_info = tokenDB.getByQuery({"address": t_0})[0]
+    token1_info = tokenDB.getByQuery({"address": t_1})[0]
+    d_0 = token0_info["decimals"]
+    d_1 = token1_info["decimals"]
+    if (r_0 / 10**d_0 <= settings.minReserve[token0_info["symbol"]] or
+        (r_1 / 10**d_1 <= settings.minReserve[token1_info["symbol"]])):
+        print(exchange, token0, r_0 / 10**d_0,
+                token1, r_1 / 10**d_1, " liquidity too low")
+        return
+
+    print(f"Adding {token0}/{token1} pair")
+    s_0 = token0 if settings.tokens[token0] == t_0 else token1
+    s_1 = token1 if s_0 == token0 else token0
+    pairDB.add({   "token0": t_0,
+                    "symbol0": s_0,
+                    "reserve0": r_0 / 10**d_0,
+                    "token1": t_1,
+                    "symbol1": s_1,
+                    "reserve1": r_1 / 10**d_1,
+                    "pairAddress": pair_address,
+                    "exchange": exchange
+            })
+
+def update_pair_db():
+    """Update the pair database with any new valid pools"""
     #Get non-repeating pairs
-    k1 = list(settings.tokens.keys())
-    k2 = list(settings.tokens.keys())
-    allPairs = []
-    for i in range(len(k1)):
-        for j in range(i + 1, len(k2)):
-            allPairs.append((k1[i], k2[j]))
-    
-    for (token0, token1) in allPairs:
-        if (token0 == token1):
+    keys = list(settings.tokens.keys())
+    all_pairs = []
+    for i, _ in enumerate(keys):
+        for j in range(i + 1, len(keys)):
+            all_pairs.append((keys[i], keys[j]))
+
+    for (token0, token1) in all_pairs:
+        if token0 == token1:
             continue
-        
+
         ###create new pair for blaze/pangolin/neo/canaryx/flrfinance/etc
         for exchange in settings.exchanges:
             #Check if DB has this pair
@@ -71,160 +118,113 @@ def updatePairDatabase():
 
             #Not in DB - Check if is real pair
             try:
-                pairAddress = "0x0"
-                if exchange == "blazeswap":
-                    pairAddress = contracts[exchange].functions.pairFor(settings.tokens[token0], settings.tokens[token1]).call()
-                else:
-                    pairAddress = contracts[exchange].functions.getPair(settings.tokens[token0], settings.tokens[token1]).call()
-                pairContract = settings.RPC.eth.contract(address=pairAddress, abi=settings.BlazeSwapPairABI)
-                [r0, r1, ts] = pairContract.functions.getReserves().call() #Will fail here if invalid
-
-                t0 = pairContract.functions.token0().call()
-                t1 = pairContract.functions.token1().call()
-                #Determine if there is enough reserve to be worth it
-                tokenInfo0 = tokenDB.getByQuery({"address": t0})[0]
-                tokenInfo1 = tokenDB.getByQuery({"address": t1})[0]
-                d0 = tokenInfo0["decimals"]
-                d1 = tokenInfo1["decimals"]
-                if (r0 / 10**d0 <= settings.minReserve[tokenInfo0["symbol"]]) or (r1 / 10**d1 <= settings.minReserve[tokenInfo1["symbol"]]):
-                    print(exchange, token0, r0 / 10**d0, token1, r1 / 10**d1, " liquidity too low")
-                    continue
-
-                print(f"Adding {token0}/{token1} pair")
-                s0 = token0 if settings.tokens[token0] == t0 else token1
-                s1 = token1 if s0 == token0 else token0
-                pairDB.add({   "token0": t0,
-                                "symbol0": s0,
-                                "reserve0": r0 / 10**d0,
-                                "token1": t1,
-                                "symbol1": s1,
-                                "reserve1": r1 / 10**d1,
-                                "pairAddress": pairAddress,
-                                "exchange": exchange
-                        })
-            except Exception as e:
+                check_and_save_pair(exchange, token0, token1)
+            except Exception as exception:
+                #TODO: More specific error catching?
                 #Invalid pair
-                print(exchange, token0, token1, "failed", type(e))
+                print(exchange, token0, token1, "failed", type(exception))
                 continue
 
 
-def initializePairCache():
+def init_pair_cache():
+    """Essentially pull the entire PairDB into memory.
+    File lookup takes too long for this application."""
+
     print("Cacheing all pairs")
     #Get all token address pairs
-    allPairs = itertools.product(settings.tokens.values(), repeat=2)
+    all_pairs = itertools.product(settings.tokens.values(), repeat=2)
 
-    
-    for (token0, token1) in allPairs:
+    for (token0, token1) in all_pairs:
         for exchange in settings.exchanges:
-            if (token0 == token1):
+            if token0 == token1:
                 continue
             #Sort alphabetically
-            if (token0.lower() > token1.lower()):
-                temp = token1
-                token1 = token0
-                token0 = temp
+            if token0.lower() > token1.lower():
+                token0, token1 = token1, token0
 
-            pairEntry = pairDB.getByQuery({"token0": token0, "token1": token1, "exchange": exchange})
-            if len(pairEntry) > 0:
-                settings.pairCache[(exchange, token0, token1)] = pairEntry[0]
+            pair_entry = pairDB.getByQuery({
+                "token0": token0,
+                "token1": token1,
+                "exchange": exchange
+            })
+            if len(pair_entry) > 0:
+                settings.pairCache[(exchange, token0, token1)] = pair_entry[0]
 
-        
-def updatePairReserves():
-    allPairObjects = pairDB.getAll()
-    allPairObjects = list(
+
+def update_pair_reserves():
+    """For each pair we are using, update the reserves, both in memory and PairCache"""
+    all_pair_entries = pairDB.getAll()
+    all_pair_entries = list(
                         filter(
-                            lambda pair: 
-                                pair["exchange"] in settings.exchanges and 
-                                pair["symbol0"] in settings.tokens.keys() and
-                                pair["symbol1"] in settings.tokens.keys(), allPairObjects))
+                            lambda pair:
+                                pair["exchange"] in settings.exchanges and
+                                pair["symbol0"] in settings.tokens and
+                                pair["symbol1"] in settings.tokens,
+                                all_pair_entries)
+                            )
     start = time.time()
     #BATCHED
-    updatedPairs = batchGetReserves(allPairObjects)
+    updated_pairs = batch_get_reserves(all_pair_entries)
     #Normalize to standard decimals
-    for pair in updatedPairs:
-        d0 = tokenDB.getByQuery({"symbol": pair["symbol0"]})[0]["decimals"]
-        d1 = tokenDB.getByQuery({"symbol": pair["symbol1"]})[0]["decimals"]
+    #TODO: Don't "need" this in memory, might save a few MS by updating cache only
+    for pair in updated_pairs:
+        d_0 = tokenDB.getByQuery({"symbol": pair["symbol0"]})[0]["decimals"]
+        d_1 = tokenDB.getByQuery({"symbol": pair["symbol1"]})[0]["decimals"]
         pairDB.updateByQuery(
-                {"pairAddress": pair["pairAddress"]}, 
-                {"reserve0": pair["reserve0"] / pow(10, d0), "reserve1": pair["reserve1"]/pow(10, d1) }
+                {"pairAddress": pair["pairAddress"]},
+                {
+                    "reserve0": pair["reserve0"] / pow(10, d_0),
+                    "reserve1": pair["reserve1"]/pow(10, d_1)
+                }
             )
 
         if pair["exchange"] not in settings.exchanges:
             continue
-        
+
         #Update pairCache
-        settings.pairCache[(pair["exchange"], pair["token0"], pair["token1"])]["reserve0"] = pair["reserve0"] / pow(10, d0)
-        settings.pairCache[(pair["exchange"], pair["token0"], pair["token1"])]["reserve1"] = pair["reserve1"] / pow(10, d1)
+        settings.pairCache[(pair["exchange"],
+                            pair["token0"],
+                            pair["token1"])]["reserve0"] = pair["reserve0"] / pow(10, d_0)
+        settings.pairCache[(pair["exchange"],
+                            pair["token0"],
+                            pair["token1"])]["reserve1"] = pair["reserve1"] / pow(10, d_1)
 
     print("Update took ", time.time() - start)
 
-
 #Use modified Johnson algorithm to quickly find all cycles through the source token
-def initializeCycleList(source):
-    #Build adjacency list as Johnson's algorithm needs it
-    #Also build an index of node's token value to convert back later
-    neighbors = {}
-    nodeValues = {}
-    graph = {} # Final adjacency list with number values
-    nodeValues[("source", settings.tokens[source])] = 0 #Hard code the start node as a non-exchange-affiliated SOURCE
-    settings.node_index_values[source] = {}
-    settings.node_index_values[source]["0"] = ("source", settings.tokens[source])
-    index = 0
-    for (token) in settings.tokens.values():
-        for exchange in settings.exchanges:
-            index += 1
-            nodeValues[(exchange, token)] = index
-            settings.node_index_values[source][str(index)] = (exchange, token)
-            if token == settings.tokens[source]:
-                neighbors[(exchange, token)] = [("source", token)]
-                neighbors[("source", token)] = getNeighbors(token, pairDB)
-            else:
-                neighbors[(exchange, token)] = getNeighbors(token, pairDB)
+def init_cycle_list(source):
+    """Creates a graph of token adjacency.
+    Converts to Johnson-compatible graph, and builds a mapping to convert back to token values"""
+    node_to_index = get_named_pairs(source)
+    neighbors = get_neighbor_tokens(source, pairDB)
+    johnson_graph = get_johnson_graph(source, neighbors, node_to_index)
 
-    #Give zero element connectivity manually
-    sourceAdjacencyList = []
-    for (neighborExchange, neighborToken) in neighbors[("source", settings.tokens[source])]:
-        if (neighborToken in settings.tokens.values() and neighborExchange in settings.exchanges):
-                sourceAdjacencyList.append(nodeValues[(neighborExchange, neighborToken)])
-    graph[0] = sourceAdjacencyList
-    #Now handle rest of elements
-    for (idx, token) in enumerate(settings.tokens.values()):
-        for exchange in settings.exchanges:
-            adjacencyList = []
-            for (neighborExchange, neighborToken) in neighbors[(exchange, token)]:
-                if (neighborToken in settings.tokens.values() and (neighborExchange in settings.exchanges or neighborExchange == "source")):
-                    adjacencyList.append(nodeValues[(neighborExchange, neighborToken)])
-            adjacencyList.sort()
-            graph[nodeValues[(exchange, token)]] = adjacencyList
-
-    # print(graph)
-    # print(nodeValues)    
     #With initialized graph,
     #Find all cycles through source.
     timer = time.time()
-    cycles_generator = simple_cycles(graph)
-    #Limit to length 6 cycles. Question - How low is practical?
-    #So far, no difference in opportunities down to <6.
+    cycles_generator = simple_cycles(johnson_graph)
     cycles = filter(lambda cycle: len(cycle) < 10 and len(cycle) > 2, cycles_generator)
+
     i = 0
     with open(f"./data/cycles_{source}.txt", "w") as file:
         settings.source_cycles[source] = []
         for cycle in cycles:
             i+=1
-            if (i % 10000 == 0):
+            if i % 10000 == 0:
                 print(f"Processed {i} cycles...")
             cycle.append(0)
             settings.source_cycles[source].append(cycle)
-            
-            
+
+
             line_str = [str(n) for n in cycle]
             file.write(" ".join(line_str) + "\n")
-    
-    with open(f"./data/index_values.json", "w") as file:
-        json.dump(settings.node_index_values, file)
-    print("Found {} useful cycles in {}".format(len(settings.source_cycles[source]), (time.time() - timer)))
 
-def readCycleList(source):
+    with open(f"./data/index_values_{settings.env}.json", "w") as file:
+        json.dump(settings.node_index_values, file)
+    print(f"Found {len(settings.source_cycles[source])} useful cycles in {time.time() - timer}")
+
+def read_cycle_list(source):
+    """When a cycle list already exists, read from file instead of calculating"""
     timer = time.time()
     with open(f"./data/cycles_{source}.txt", "r") as file:
         settings.source_cycles[source] = []
@@ -236,20 +236,25 @@ def readCycleList(source):
             settings.source_cycles[source].append(list(cycle))
             count += 1
             line = file.readline()
-    
-    with open(f"./data/index_values.json", "r") as file:
+
+    with open(f"./data/index_values_{settings.env}.json", "r") as file:
         data = json.load(file)
-        for source_key in data.keys():
+        for source_key in data:
             settings.node_index_values[source_key] = {}
-            for token_key in data[source_key].keys():
+            for token_key in data[source_key]:
                 settings.node_index_values[source_key][token_key] = data[source_key][token_key]
-    
-    print("Read {} cycles in {} seconds".format(count, (time.time() - timer)))
 
-    
+    print(f"Read {count} cycles in {time.time() - timer} seconds")
 
-def initLoop():
-    consecutiveReverts = 0
+
+
+def main_loop():
+    """
+    Each block that comes in, check all cycles for possible arbitrage.
+    Perform the trade if found.
+    If there are 5 consecutive reverts, with no brakes, kill the program.
+    """
+    revert_counter = 0
     event_filter = settings.ArbitrageContract.events.Result.createFilter(fromBlock='latest')
     block_filter = settings.RPC.eth.filter("latest")
 
@@ -258,8 +263,8 @@ def initLoop():
     while True:
         for block in block_filter.get_new_entries():
             now = time.time()
-            
-            updatePairReserves()
+
+            update_pair_reserves()
             statuses = []
             for source in settings.source_tokens:
                 statuses.append(findpaths(source, settings.tokens[source], 'profit'))
@@ -271,41 +276,39 @@ def initLoop():
             #Should never revert 5 ticks in a row
             #There should at least be a no_paths_found response first!
             if -1 in statuses:
-                consecutiveReverts += 1
+                revert_counter += 1
             else:
-                consecutiveReverts = 0
+                revert_counter = 0
 
             blocktime = settings.RPC.eth.get_block(block.hex())["timestamp"]
-            print("Delay was {}\n".format(now - blocktime))
-            
+            print(f"Delay was {now - blocktime}\n")
+
         #Naive negative loop safety
-        if consecutiveReverts > 5:
+        if revert_counter > 5:
             break
 
-# Initialization
+
 def main():
-    bootstrap = False
+    """Initialize all settings, pairs, and cycles. Then, kick off the main loop"""
+    bootstrap = True
     settings.init_settings()
     print("Hello, Arbitrageur!")
     #Bootstrap with latest tokens and pools
     if bootstrap:
         print("Bootstrapping token DB")
-        bootstrapTokenDatabase() #Get token decimals
+        bootstrap_token_db() #Get token decimals
         print("Updating Pair DB")
-        updatePairDatabase() #Check for any new pairs since last run
+        update_pair_db() #Check for any new pairs since last run
         print("Initializing the cycles...")
         for source in settings.source_tokens:
-            initializeCycleList(source)
+            init_cycle_list(source)
     else:
         print("Reading cycle lists...")
         for source in settings.source_tokens:
-            readCycleList(source)
-    initializePairCache()  
+            read_cycle_list(source)
+    init_pair_cache()
 
-    # print(settings.source_cycles.keys(), len(settings.source_cycles["WNAT"]))  
-    # print(settings.node_index_values)
-
-    initLoop()
+    main_loop()
 
 
 
