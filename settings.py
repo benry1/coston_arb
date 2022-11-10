@@ -156,7 +156,7 @@ def init_settings():
 
         mr_const = 250
         min_reserve = {
-            "WNAT": mr_const,
+            "WSGB": mr_const,
             "SFORT": mr_const,
             "DOOD": mr_const,
             "sDOOD": mr_const,
