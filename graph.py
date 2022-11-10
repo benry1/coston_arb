@@ -140,7 +140,7 @@ def findpaths(from_symbol, from_token, sort_key) -> int:
                                                                      sort_key)
 
     print(f"Done searching {from_symbol}, " +\
-            "found {profitable_paths_counter} in {time.time() - timer}")
+            f"found {profitable_paths_counter} in {time.time() - timer}")
     # print(profitable_paths)
 
     #Naively execute the best opportunity
