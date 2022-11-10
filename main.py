@@ -104,6 +104,7 @@ def update_pair_db():
         for j in range(i + 1, len(keys)):
             all_pairs.append((keys[i], keys[j]))
 
+    print(all_pairs)
     for (token0, token1) in all_pairs:
         if token0 == token1:
             continue
@@ -170,13 +171,13 @@ def update_pair_reserves():
     for pair in updated_pairs:
         d_0 = tokenDB.getByQuery({"symbol": pair["symbol0"]})[0]["decimals"]
         d_1 = tokenDB.getByQuery({"symbol": pair["symbol1"]})[0]["decimals"]
-        pairDB.updateByQuery(
-                {"pairAddress": pair["pairAddress"]},
-                {
-                    "reserve0": pair["reserve0"] / pow(10, d_0),
-                    "reserve1": pair["reserve1"]/pow(10, d_1)
-                }
-            )
+        # pairDB.updateByQuery(
+        #         {"pairAddress": pair["pairAddress"]},
+        #         {
+        #             "reserve0": pair["reserve0"] / pow(10, d_0),
+        #             "reserve1": pair["reserve1"]/pow(10, d_1)
+        #         }
+        #     )
 
         if pair["exchange"] not in settings.exchanges:
             continue
