@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from do_arb import submit_arbitrage
 from virtualpools import get_amount_out, get_virtual_pool, get_optimal_amount
-from settings import source_cycles, node_index_values, deflationLevel, pathHistory, statHistory
+from settings import source_cycles, node_index_values, deflation_level, path_history, stat_history
 import settings
 
 
@@ -163,8 +163,8 @@ def vet_opportunity(new_cycle, profitable_path_list, profitable_path_counter, so
     path = new_cycle["path"]
     required_profit = 1.001
     for (_, token) in path:
-        if token in settings.deflationaryTokens:
-            required_profit *= deflationLevel[token]
+        if token in settings.deflationary_tokens:
+            required_profit *= deflation_level[token]
 
     required_profit = Decimal(required_profit)
 
@@ -173,8 +173,8 @@ def vet_opportunity(new_cycle, profitable_path_list, profitable_path_counter, so
         return profitable_path_list, profitable_path_counter
 
     #Has this same path failed recently?
-    for i in reversed(range(len(pathHistory))):
-        if new_cycle["path"] == pathHistory[i] and statHistory[i] <= 0:
+    for i in reversed(range(len(path_history))):
+        if new_cycle["path"] == path_history[i] and stat_history[i] <= 0:
             print("Ignoring because this path reverted recently.")
             return profitable_path_list, profitable_path_counter
 

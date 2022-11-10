@@ -1,8 +1,8 @@
 # Define Globals
 
 from web3 import Web3
-from dotenv import dotenv_values
 from web3.middleware import geth_poa_middleware
+from dotenv import dotenv_values
 import pymongo
 
 
@@ -41,13 +41,13 @@ ArbitrageContract = RPC.eth.contract(address=ArbitrageAddress, abi=ArbitrageABI)
 eighteen_decimals = 10**18
 
 tokens = {}
-minReserve = {}
+min_reserve = {}
 source_tokens = []
-deflationaryTokens = []
+deflationary_tokens = []
 
 #What is the minimum profit margin
 #To accept a cycle using this deflationary token?
-deflationLevel = {
+deflation_level = {
     "0x8d32E20d119d936998575B4AAff66B9999011D27": 1.101,
     "0xf810576A68C3731875BDe07404BE815b16fC0B4e": 1.01,
     "0xF3D185162E55463264B0d63DD4497093B00F57d1": 1.01
@@ -73,7 +73,7 @@ exchanges = []
 #       Graph Helpers Initialized once
 #
 #
-pairCache = {}
+pair_cache = {}
 source_cycles = {}
 node_index_values = {}
 
@@ -85,10 +85,10 @@ node_index_values = {}
 #
 
 # = [ [path1], [path2], .... , [mostRecentPath] ]
-pathHistory = []
+path_history = []
 
 # = [ -1, 1, 0, 0, 1, -1, -1]
-statHistory = []
+stat_history = []
 
 #
 #   MongoDB
@@ -98,14 +98,13 @@ statHistory = []
 mongoURI = config["mongoURI"]
 mongoDBName = config["mongoDBName"]
 mongo = pymongo.MongoClient(mongoURI)
-arbDB = mongo[mongoDBName]
-tradesCollection = arbDB["trades"]
+arb_db = mongo[mongoDBName]
+mongo_trades_collection = arb_db["trades"]
 
 
 #Build the environment based on which network we're on
 def init_settings():
-    global env, tokens, minReserve, exchanges, deflationaryTokens, source_tokens
-    print(env)
+    global tokens, min_reserve, exchanges, deflationary_tokens, source_tokens
     if env == "coston":
         tokens = {
             "WCFLR":   "0x1659941d425224408c5679eeef606666c7991a8A",
@@ -119,7 +118,7 @@ def init_settings():
             "testUSD": "0x0B79FC311A7b89ed328b7AbA6f18495996eBb339",
             "testXAU": "0xF3D185162E55463264B0d63DD4497093B00F57d1",
         }
-        minReserve = {
+        min_reserve = {
             "WCFLR":   0,
             "testBTC": 0,
             "testXRP": 0,
@@ -131,7 +130,7 @@ def init_settings():
             "testUSD": 0,
             "testXAU": 0,
         }
-        deflationaryTokens = ["0xF3D185162E55463264B0d63DD4497093B00F57d1"] # Coston
+        deflationary_tokens = ["0xF3D185162E55463264B0d63DD4497093B00F57d1"] # Coston
         exchanges = ["blazeswap"]
         source_tokens = ["WCFLR"]
     elif env == "songbird":
@@ -147,7 +146,6 @@ def init_settings():
             "EXFI": "0xC348F894d0E939FE72c467156E6d7DcbD6f16e21",
             "SFIN": "0x0D94e59332732D18CF3a3D457A8886A2AE29eA1B",
             "CAND": "0x70Ad7172EF0b131A1428D0c1F66457EB041f2176",
-            # "COOT": "0x1A3d09Ece7268c3cE3e6b5457978EaDaF5A6811A", #TODO: This is an ERC721 ?
             "CNYX": "0x8d32E20d119d936998575B4AAff66B9999011D27", #Deflationary (like 10 %)
             "dFLR": "0x6f1Be01f9cD0c14E38f94E81Cb281ecB98Cc6A9b",
             "CGLD": "0x1c7d1dd0995dd0ABdd71FD67924C9dD4Cf7b4135",
@@ -157,7 +155,7 @@ def init_settings():
         }
 
         mr_const = 250
-        minReserve = {
+        min_reserve = {
             "WNAT": mr_const,
             "SFORT": mr_const,
             "DOOD": mr_const,
@@ -169,7 +167,6 @@ def init_settings():
             "EXFI": mr_const,
             "SFIN": mr_const / 10000,
             "CAND": mr_const,
-            # "COOT": mr_const, #TODO: This is an ERC721 ?
             "CNYX": mr_const, #Deflationary (like 10 %)
             "dFLR": mr_const,
             "CGLD": mr_const,
@@ -177,7 +174,8 @@ def init_settings():
             "sRIBBITS": mr_const * 1000,
             "TRSH": mr_const,
         }
-        deflationaryTokens = ["0x8d32E20d119d936998575B4AAff66B9999011D27", '0xf810576A68C3731875BDe07404BE815b16fC0B4e'] # Songbird
+        deflationary_tokens = ['0x8d32E20d119d936998575B4AAff66B9999011D27',
+                              '0xf810576A68C3731875BDe07404BE815b16fC0B4e'] # Songbird
         exchanges = ["oracleswap", "pangolin"]
         source_tokens = ["WSGB"]
 

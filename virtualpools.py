@@ -89,8 +89,8 @@ def get_virtual_pool(token_in, path):
 def get_pool(token_0, token_1, exchange):
     """Get the pool sizes from the pair cache"""
     if token_0.lower() < token_1.lower():
-        return settings.pairCache[(exchange, token_0, token_1)]
-    return settings.pairCache[(exchange, token_1, token_0)]
+        return settings.pair_cache[(exchange, token_0, token_1)]
+    return settings.pair_cache[(exchange, token_1, token_0)]
 
 def get_pairs_in_path(path):
     """Get the pool size for every pair in the path"""

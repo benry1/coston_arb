@@ -76,8 +76,8 @@ def check_and_save_pair(exchange, token0, token1):
     token1_info = tokenDB.getByQuery({"address": t_1})[0]
     d_0 = token0_info["decimals"]
     d_1 = token1_info["decimals"]
-    if (r_0 / 10**d_0 <= settings.minReserve[token0_info["symbol"]] or
-        (r_1 / 10**d_1 <= settings.minReserve[token1_info["symbol"]])):
+    if (r_0 / 10**d_0 <= settings.min_reserve[token0_info["symbol"]] or
+        (r_1 / 10**d_1 <= settings.min_reserve[token1_info["symbol"]])):
         print(exchange, token0, r_0 / 10**d_0,
                 token1, r_1 / 10**d_1, " liquidity too low")
         return
@@ -148,7 +148,7 @@ def init_pair_cache():
                 "exchange": exchange
             })
             if len(pair_entry) > 0:
-                settings.pairCache[(exchange, token0, token1)] = pair_entry[0]
+                settings.pair_cache[(exchange, token0, token1)] = pair_entry[0]
 
 
 def update_pair_reserves():
@@ -182,10 +182,10 @@ def update_pair_reserves():
             continue
 
         #Update pairCache
-        settings.pairCache[(pair["exchange"],
+        settings.pair_cache[(pair["exchange"],
                             pair["token0"],
                             pair["token1"])]["reserve0"] = pair["reserve0"] / pow(10, d_0)
-        settings.pairCache[(pair["exchange"],
+        settings.pair_cache[(pair["exchange"],
                             pair["token0"],
                             pair["token1"])]["reserve1"] = pair["reserve1"] / pow(10, d_1)
 

@@ -41,7 +41,7 @@ def parse_path(in_path, source_symbol):
     #Now check deflationary status for each path
     for path in paths:
         has_deflationary = False
-        for token in settings.deflationaryTokens:
+        for token in settings.deflationary_tokens:
             if token in path:
                 has_deflationary = True
         deflationary.append(has_deflationary)
@@ -141,11 +141,11 @@ def submit_arbitrage(source_symbol, path, amount, expected) -> int :
     #   Logging
     #
 
-    settings.pathHistory.append(path)
-    settings.statHistory.append(ret)
-    if len(settings.pathHistory) > 5:
-        settings.pathHistory.pop(0)
-        settings.statHistory.pop(0)
+    settings.path_history.append(path)
+    settings.stat_history.append(ret)
+    if len(settings.path_history) > 5:
+        settings.path_history.pop(0)
+        settings.stat_history.pop(0)
 
     now = datetime.now()
     dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
@@ -164,7 +164,7 @@ def submit_arbitrage(source_symbol, path, amount, expected) -> int :
     #   MongoDB Logging
     #
     #
-    settings.tradesCollection.update_one(
+    settings.mongo_trades_collection.update_one(
             {
                 "tradeId": arb_id
             },

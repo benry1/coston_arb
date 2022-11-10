@@ -18,7 +18,7 @@ def handle_event(event):
     event_json["endBalance"] = event_json["endBalance"] / settings.eighteen_decimals
     event_json["startBalance"]  = event_json["startBalance"] / settings.eighteen_decimals
     event_json["profit"]  = event_json["profit"] / settings.eighteen_decimals
-    settings.tradesCollection.update_one(
+    settings.mongo_trades_collection.update_one(
             {
                 "tradeId": event_json["id"]
             },
