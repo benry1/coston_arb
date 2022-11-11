@@ -39,7 +39,9 @@ pairDB  = db.getDb("./data/pairs.json")
 contracts = {
     "pangolin": settings.PangolinFactoryContract,
     "oracleswap": settings.OracleSwapContract,
-    "blazeswap": settings.BlazeSwapContract
+    "blazeswap": settings.BlazeSwapContract,
+    "pangolin-avalanche": settings.PangolinAvalancheFactoryContract,
+    "traderjoe": settings.TraderJoeFactoryContract
 }
 
 # Save token info if not exist
@@ -204,15 +206,15 @@ def init_cycle_list(source):
     #Find all cycles through source.
     timer = time.time()
     cycles_generator = simple_cycles(johnson_graph)
-    cycles = filter(lambda cycle: len(cycle) < 10 and len(cycle) > 2, cycles_generator)
+    cycles = filter(lambda cycle: len(cycle) < 7 and len(cycle) > 2, cycles_generator)
 
     i = 0
     with open(f"./data/cycles_{source}.txt", "w") as file:
         settings.source_cycles[source] = []
         for cycle in cycles:
             i+=1
-            if i % 10000 == 0:
-                print(f"Processed {i} cycles...")
+            if i % 1000 == 0:
+                print(f"Processed {i} cycles in {time.time() - timer}...")
             cycle.append(0)
             settings.source_cycles[source].append(cycle)
 
@@ -299,7 +301,7 @@ def main():
         print("Bootstrapping token DB")
         bootstrap_token_db() #Get token decimals
         print("Updating Pair DB")
-        update_pair_db() #Check for any new pairs since last run
+        # update_pair_db() #Check for any new pairs since last run
         print("Initializing the cycles...")
         for source in settings.source_tokens:
             init_cycle_list(source)
