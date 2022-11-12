@@ -13,6 +13,7 @@ from pysondb import db
 
 import settings
 from johnson import simple_cycles
+from dfs import dfs
 from rpc import batch_get_reserves, handle_event
 from graph import findpaths, get_named_pairs, get_neighbor_tokens, get_johnson_graph
 
@@ -41,7 +42,10 @@ contracts = {
     "oracleswap": settings.OracleSwapContract,
     "blazeswap": settings.BlazeSwapContract,
     "pangolin-avalanche": settings.PangolinAvalancheFactoryContract,
-    "traderjoe": settings.TraderJoeFactoryContract
+    "traderjoe": settings.TraderJoeFactoryContract,
+    "sushiswap": settings.SushiSwapFactoryContract,
+    "swapsicle": settings.SwapsicleFactoryContract
+    # "kyberswap": settings.KyberSwapFactoryContract
 }
 
 # Save token info if not exist
@@ -61,6 +65,12 @@ def check_and_save_pair(exchange, token0, token1):
                                                     settings.tokens[token0],
                                                     settings.tokens[token1]
                                                 ).call()
+    # elif exchange == "kyberswap":
+    #     #TODO: Kyber requires the specific pool fee to get pool? and a ton of weird paramas to actually swap.
+    #     pair_address = contracts[exchange].functions.getPool(
+    #                                                 settings.tokens[token0],
+    #                                                 settings.tokens[token1]
+    #                                             ).call()
     else:
         pair_address = contracts[exchange].functions.getPair(
                                                     settings.tokens[token0],
@@ -106,7 +116,6 @@ def update_pair_db():
         for j in range(i + 1, len(keys)):
             all_pairs.append((keys[i], keys[j]))
 
-    print(all_pairs)
     for (token0, token1) in all_pairs:
         if token0 == token1:
             continue
@@ -201,12 +210,13 @@ def init_cycle_list(source):
     node_to_index = get_named_pairs(source)
     neighbors = get_neighbor_tokens(source, pairDB)
     johnson_graph = get_johnson_graph(source, neighbors, node_to_index)
+    print(johnson_graph)
 
     #With initialized graph,
     #Find all cycles through source.
     timer = time.time()
-    cycles_generator = simple_cycles(johnson_graph)
-    cycles = filter(lambda cycle: len(cycle) < 7 and len(cycle) > 2, cycles_generator)
+    cycles_generator = dfs(johnson_graph, 0, 0, 8)
+    cycles = filter(lambda cycle: len(cycle) > 2, cycles_generator)
 
     i = 0
     with open(f"./data/cycles_{source}.txt", "w") as file:
@@ -215,7 +225,7 @@ def init_cycle_list(source):
             i+=1
             if i % 1000 == 0:
                 print(f"Processed {i} cycles in {time.time() - timer}...")
-            cycle.append(0)
+            cycle.insert(0, 0)
             settings.source_cycles[source].append(cycle)
 
 
@@ -258,13 +268,13 @@ def main_loop():
     If there are 5 consecutive reverts, with no brakes, kill the program.
     """
     revert_counter = 0
-    event_filter = settings.ArbitrageContract.events.Result.createFilter(fromBlock='latest')
+    # event_filter = settings.ArbitrageContract.events.Result.createFilter(fromBlock='latest')
     block_filter = settings.RPC.eth.filter("latest")
 
     print("Waiting for blocks to begin!")
 
     while True:
-        for block in block_filter.get_new_entries():
+        # for block in block_filter.get_new_entries():
             now = time.time()
 
             update_pair_reserves()
@@ -273,8 +283,8 @@ def main_loop():
                 statuses.append(findpaths(source, settings.tokens[source], 'profit'))
 
 
-            for event in event_filter.get_new_entries():
-                handle_event(event)
+            # for event in event_filter.get_new_entries():
+            #     handle_event(event)
 
             #Should never revert 5 ticks in a row
             #There should at least be a no_paths_found response first!
@@ -283,12 +293,12 @@ def main_loop():
             else:
                 revert_counter = 0
 
-            blocktime = settings.RPC.eth.get_block(block.hex())["timestamp"]
-            print(f"Delay was {now - blocktime}\n")
+            # blocktime = settings.RPC.eth.get_block(block.hex())["timestamp"]
+            # print(f"Delay was {now - blocktime}\n")
 
         #Naive negative loop safety
-        if revert_counter > 5:
-            break
+            if revert_counter > 5:
+                break
 
 
 def main():

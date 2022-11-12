@@ -3,6 +3,7 @@ Handles all RPC batch calling and parsing
 """
 import json
 import threading
+import random
 
 from web3._utils.request import make_post_request
 from web3 import HTTPProvider
@@ -52,7 +53,8 @@ def generate_get_reserves_batch(pairs, block_number='latest'):
                     'data': contract.encodeABI(fn_name='getReserves', args=[]),
                     },
                     hex(block_number) if block_number != 'latest' else 'latest',
-                    ]
+                    ],
+                request_id=random.randrange(99999999999999999)
                 )
 
 def rpc_response_batch_to_results(response):
