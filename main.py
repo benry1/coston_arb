@@ -44,8 +44,12 @@ contracts = {
     "pangolin-avalanche": settings.PangolinAvalancheFactoryContract,
     "traderjoe": settings.TraderJoeFactoryContract,
     "sushiswap": settings.SushiSwapFactoryContract,
-    "swapsicle": settings.SwapsicleFactoryContract
-    # "kyberswap": settings.KyberSwapFactoryContract
+    "swapsicle": settings.SwapsicleFactoryContract,
+    # "kyberswap": settings.KyberSwapFactoryContract,
+    "elkfinance": settings.ElkFinanceFactoryContract,
+    "hakuswap" : settings.HakuSwapFactoryContract,
+    "lydiafinance": settings.LydiaFinanceFactoryContract,
+    "radioshack": settings.RadioShackFactoryContract
 }
 
 # Save token info if not exist
@@ -269,7 +273,7 @@ def main_loop():
     """
     revert_counter = 0
     # event_filter = settings.ArbitrageContract.events.Result.createFilter(fromBlock='latest')
-    block_filter = settings.RPC.eth.filter("latest")
+    # block_filter = settings.RPC.eth.filter("latest")
 
     print("Waiting for blocks to begin!")
 
@@ -303,7 +307,7 @@ def main_loop():
 
 def main():
     """Initialize all settings, pairs, and cycles. Then, kick off the main loop"""
-    bootstrap = True
+    bootstrap = False
     settings.init_settings()
     print("Hello, Arbitrageur!")
     #Bootstrap with latest tokens and pools
@@ -311,7 +315,7 @@ def main():
         print("Bootstrapping token DB")
         bootstrap_token_db() #Get token decimals
         print("Updating Pair DB")
-        # update_pair_db() #Check for any new pairs since last run
+        update_pair_db() #Check for any new pairs since last run
         print("Initializing the cycles...")
         for source in settings.source_tokens:
             init_cycle_list(source)

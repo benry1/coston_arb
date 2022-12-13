@@ -99,8 +99,8 @@ def findpaths(from_symbol, from_token, sort_key) -> int:
         counter = counter + 1
         if counter % 100000 == 0:
             print(f"Cycles checked: {counter} " +\
-                      "Profitable cycles found: {profitable_paths_counter}, " +\
-                      "Time since last log: {time.time() - step_timer}")
+                      f"Profitable cycles found: {profitable_paths_counter}, " +\
+                      f"Time since last log: {time.time() - step_timer}")
             step_timer = time.time()
 
         #Reconstruct path
