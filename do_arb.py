@@ -121,9 +121,9 @@ def submit_arbitrage(source_symbol, path, amount, expected) -> int :
     ideal_profit = (expected - amount) * (execution_amount / amount)
     multiplier = 1
     if ideal_profit > 10:
-        multiplier = 3
-    if ideal_profit > 100:
         multiplier = 5
+    if ideal_profit > 100:
+        multiplier = 50
 
     if not settings.debug:
         tx_hash, gas, status, revert_reason = send_transaction(execution_amount,
