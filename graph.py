@@ -99,8 +99,8 @@ def findpaths(from_symbol, from_token, sort_key) -> int:
         counter = counter + 1
         if counter % 100000 == 0:
             print(f"Cycles checked: {counter} " +\
-                      "Profitable cycles found: {profitable_paths_counter}, " +\
-                      "Time since last log: {time.time() - step_timer}")
+                      f"Profitable cycles found: {profitable_paths_counter}, " +\
+                      f"Time since last log: {time.time() - step_timer}")
             step_timer = time.time()
 
         #Reconstruct path
@@ -124,6 +124,18 @@ def findpaths(from_symbol, from_token, sort_key) -> int:
             continue
 
         new_cycle['outputAmount'] = get_amount_out(new_cycle['optimalAmount'], Ea, Eb)
+        #If the deflationary token is the last one in a path, then we end up double deflating.
+        for index, (exch, token_address) in enumerate(reconstructed_cycle):
+            #Break if we're at the end
+            if index == len(reconstructed_cycle) - 1:
+                continue
+            #If this token is deflationary, reflect that in output amount
+            if deflation_level.get(token_address):
+                new_cycle['outputAmount'] = new_cycle["outputAmount"]*(2 - Decimal(deflation_level[token_address]))
+            #If this is deflationary, AND the end of a cycle, reflect it twice
+            if deflation_level.get(token_address) and exch != reconstructed_cycle[index + 1][0]:
+                new_cycle['outputAmount'] = new_cycle["outputAmount"]*(2 - Decimal(deflation_level[token_address]))
+            
 
         #Move on if profit too small
         if new_cycle["outputAmount"] < new_cycle["optimalAmount"] + Decimal(1):
@@ -161,12 +173,7 @@ def vet_opportunity(new_cycle, profitable_path_list, profitable_path_counter, so
     """
     #Enough profit to offset deflationary tokens?
     path = new_cycle["path"]
-    required_profit = 1.001
-    for (_, token) in path:
-        if token in settings.deflationary_tokens:
-            required_profit *= deflation_level[token]
-
-    required_profit = Decimal(required_profit)
+    required_profit = Decimal(1.001)
 
     if new_cycle["profitRatio"] < required_profit:
         # print("Ignoring because {} < {}".format(new_cycle['profitRatio'], required_profit))

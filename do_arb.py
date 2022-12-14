@@ -105,6 +105,7 @@ def submit_arbitrage(source_symbol, path, amount, expected) -> int :
     print(paths)
     print(exchanges)
     print(deflationary)
+    print(amount, expected)
 
     arb_id = round(time.time() * 1000)
 
