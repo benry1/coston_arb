@@ -123,7 +123,7 @@ def update_pair_db():
             except Exception as exception:
                 #TODO: More specific error catching?
                 #Invalid pair
-                print(exchange, token0, token1, "failed", type(exception))
+                print(exchange, token0, token1, "failed", type(exception), exception)
                 continue
 
 
@@ -204,7 +204,7 @@ def init_cycle_list(source):
     #Find all cycles through source.
     timer = time.time()
     cycles_generator = simple_cycles(johnson_graph)
-    cycles = filter(lambda cycle: len(cycle) < 10 and len(cycle) > 2, cycles_generator)
+    cycles = filter(lambda cycle: len(cycle) < 8 and len(cycle) > 2, cycles_generator)
 
     i = 0
     with open(f"./data/cycles_{source}.txt", "w") as file:

@@ -58,7 +58,8 @@ deflation_level = {
 # Exchanges Config #
 ####################
 
-BlazeSwapRouterAddress = "0xf0D01450C037DB2903CF5Ff638Dd1e2e6B0EEDF4" # Coston
+# BlazeSwapRouterAddress = "0xf0D01450C037DB2903CF5Ff638Dd1e2e6B0EEDF4" # Coston
+BlazeSwapRouterAddress = "0xAfcED6d85416bC3a3158563B087DB305F40FbaF3" #Songbird
 BlazeSwapContract = RPC.eth.contract(address=BlazeSwapRouterAddress, abi=BlazeSwapRouterABI)
 
 OracleSwapFactoryAddress = "0xDcA8EfcDe7F6Cb36904ea204bb7FCC724889b55d"
@@ -176,6 +177,6 @@ def init_settings():
         }
         deflationary_tokens = ['0x8d32E20d119d936998575B4AAff66B9999011D27',
                               '0xf810576A68C3731875BDe07404BE815b16fC0B4e'] # Songbird
-        exchanges = ["oracleswap", "pangolin"]
+        exchanges = ["oracleswap", "pangolin", "blazeswap"]
         source_tokens = ["WSGB"]
 
