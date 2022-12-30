@@ -155,7 +155,7 @@ def init_settings():
             "TRSH": "0x43344Ced39E2d7a6Be7Eda306E1750747D9Dcb01",
         }
 
-        mr_const = 250
+        mr_const = 200
         min_reserve = {
             "WSGB": mr_const,
             "SFORT": mr_const,
